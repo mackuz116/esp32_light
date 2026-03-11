@@ -1,0 +1,444 @@
+esphome:
+  name: esp-light
+
+# FIX DLA DS3231: Wymuszenie pracy na baterii
+  on_boot:
+    priority: -100 
+    then:
+      - delay: 1s 
+      - lambda: |-
+          uint8_t status = 0;
+          id(ds_time).read_byte(0x0F, &status);
+          if (status >> 7) { ESP_LOGE("RTC_DIAG", "Wykryto zanik zasilania RTC!"); }
+          
+          id(ds_time).write_byte(0x0E, 0x00);
+          id(ds_time).write_byte(0x0F, 0x00);
+          ESP_LOGI("DS3231_FIX", "Wymuszono podtrzymanie bateryjne");
+          id(ds_time).update();
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+api:
+  password: !secret api_password
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+i2c:
+  sda: 21
+  scl: 22
+  scan: true
+
+
+time:
+  - platform: ds1307
+    id: ds_time
+    address: 0x68
+    timezone: "Europe/Warsaw"
+    update_interval: 15s
+
+  - platform: sntp
+    id: sntp_time
+    timezone: "Europe/Warsaw"
+    on_time_sync:
+      then:
+        - ds1307.write_time:
+            id: ds_time
+
+output:
+  - platform: ledc
+    pin: 12
+    id: out_lampa1
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 13
+    id: out_lampa2
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 14
+    id: out_lampa3
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 26
+    id: out_lampa4
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 25
+    id: out_lampa5
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 33
+    id: out_lampa6
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 32
+    id: out_lampa7
+    frequency: 1000Hz
+  - platform: ledc
+    pin: 16
+    id: out_red
+  - platform: ledc
+    pin: 17
+    id: out_green
+  - platform: ledc
+    pin: 18
+    id: out_blue
+
+light:
+  - platform: monochromatic
+    name: "Lampa 1"
+    output: out_lampa1
+    id: lampa1
+    default_transition_length: 1s
+  - platform: monochromatic
+    name: "Lampa 2"
+    output: out_lampa2
+    id: lampa2
+  - platform: monochromatic
+    name: "Lampa 3"
+    output: out_lampa3
+    id: lampa3
+  - platform: monochromatic
+    name: "Lampa 4"
+    output: out_lampa4
+    id: lampa4
+  - platform: monochromatic
+    name: "Lampa 5"
+    output: out_lampa5
+    id: lampa5
+  - platform: monochromatic
+    name: "Lampa 6"
+    output: out_lampa6
+    id: lampa6
+  - platform: monochromatic
+    name: "Lampa 7 (Panel Tło)"
+    output: out_lampa7
+    id: lampa7
+  - platform: rgb
+    name: "Oświetlenie RGB"
+    red: out_red
+    green: out_green
+    blue: out_blue
+    id: light_rgb
+
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    address: 0x3C    
+    lambda: |-
+      it.strftime(0, 0, id(font_small), "Czas: %H:%M:%S", id(ds_time).now());
+      it.printf(0, 20, id(font_small), "Glowne: %.0f%%", id(lampa1).remote_values.get_brightness() * 100.0);
+      it.printf(0, 40, id(font_small), "Tlo (L7): %.0f%%", id(lampa7).remote_values.get_brightness() * 100.0);
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 12
+
+globals:
+  - id: natezenie_max_l1
+    type: float
+    restore_value: yes
+    initial_value: '1.0'
+
+
+number:
+  # --- GRUPA GŁÓWNA (L1 - L6) ---
+  - platform: template
+    name: "L1-6 Start Poranka (h:m)"
+    id: h_start_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 10
+  - platform: template
+    id: m_start_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 30
+
+  - platform: template
+    name: "L1-6 Koniec Poranka (h:m)"
+    id: h_end_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 11
+  - platform: template
+    id: m_end_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  - platform: template
+    name: "L1-6 Start Wieczora (h:m)"
+    id: h_start_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 18
+  - platform: template
+    id: m_start_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  - platform: template
+    name: "L1-6 Koniec Wieczora (h:m)"
+    id: h_end_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 19
+  - platform: template
+    id: m_end_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  # --- TŁO (L7) ---
+  - platform: template
+    name: "L7 Start Poranka (h:m)"
+    id: l7_h_start_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 8
+  - platform: template
+    id: l7_m_start_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  - platform: template
+    name: "L7 Koniec Poranka (h:m)"
+    id: l7_h_end_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 9
+  - platform: template
+    id: l7_m_end_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  - platform: template
+    name: "L7 Start Wieczora (h:m)"
+    id: l7_h_start_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 20
+  - platform: template
+    id: l7_m_start_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  - platform: template
+    name: "L7 Koniec Wieczora (h:m)"
+    id: l7_h_end_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 22
+  - platform: template
+    id: l7_m_end_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 30
+
+  # --- MOCE INDYWIDUALNE DLA KAŻDEJ LAMPY (Boxy) ---
+  - platform: template
+    name: "Moc Max Lampa 1 (%)"
+    id: pwr_l1
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+
+  - platform: template
+    name: "Moc Max Lampa 2 (%)"
+    id: pwr_l2
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+
+  - platform: template
+    name: "Moc Max Lampa 3 (%)"
+    id: pwr_l3
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+
+  - platform: template
+    name: "Moc Max Lampa 4 (%)"
+    id: pwr_l4
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+
+  - platform: template
+    name: "Moc Max Lampa 5 (%)"
+    id: pwr_l5
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+
+  - platform: template
+    name: "Moc Max Lampa 6 (%)"
+    id: pwr_l6
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+
+  - platform: template
+    name: "Moc Max Lampa 7 (Tło) (%)"
+    id: pwr_l7
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 30
+
+interval:
+  - interval: 1min
+    then:
+      - lambda: |-
+          auto now = id(ds_time).now();
+          int current_total_min = now.hour * 60 + now.minute;
+
+          // --- LOGIKA DLA LAMP GŁÓWNYCH (L1-6) ---
+          int main_up_s = (int)id(h_start_sunrise).state * 60 + (int)id(m_start_sunrise).state;
+          int main_up_e = (int)id(h_end_sunrise).state * 60 + (int)id(m_end_sunrise).state;
+          int main_down_s = (int)id(h_start_sunset).state * 60 + (int)id(m_start_sunset).state;
+          int main_down_e = (int)id(h_end_sunset).state * 60 + (int)id(m_end_sunset).state;
+
+          // WSCHÓD L1-6 (Każda do swojej mocy max)
+          if (current_total_min == main_up_s) {
+              float dur = max(1, (main_up_e - main_up_s)) * 60000.0f;
+              id(lampa1).make_call().set_brightness(id(pwr_l1).state/100.0f).set_transition_length(dur).perform();
+              id(lampa2).make_call().set_brightness(id(pwr_l2).state/100.0f).set_transition_length(dur).perform();
+              id(lampa3).make_call().set_brightness(id(pwr_l3).state/100.0f).set_transition_length(dur).perform();
+              id(lampa4).make_call().set_brightness(id(pwr_l4).state/100.0f).set_transition_length(dur).perform();
+              id(lampa5).make_call().set_brightness(id(pwr_l5).state/100.0f).set_transition_length(dur).perform();
+              id(lampa6).make_call().set_brightness(id(pwr_l6).state/100.0f).set_transition_length(dur).perform();
+          }
+
+          // ZACHÓD L1-6 (Wszystkie do 0%)
+          if (current_total_min == main_down_s) {
+              float dur = max(1, (main_down_e - main_down_s)) * 60000.0f;
+              id(lampa1).turn_off().set_transition_length(dur).perform();
+              id(lampa2).turn_off().set_transition_length(dur).perform();
+              id(lampa3).turn_off().set_transition_length(dur).perform();
+              id(lampa4).turn_off().set_transition_length(dur).perform();
+              id(lampa5).turn_off().set_transition_length(dur).perform();
+              id(lampa6).turn_off().set_transition_length(dur).perform();
+          }
+
+          // --- LOGIKA DLA TŁA (L7) ---
+          int l7_up_s = (int)id(l7_h_start_sunrise).state * 60 + (int)id(l7_m_start_sunrise).state;
+          int l7_up_e = (int)id(l7_h_end_sunrise).state * 60 + (int)id(l7_m_end_sunrise).state;
+          int l7_down_s = (int)id(l7_h_start_sunset).state * 60 + (int)id(l7_m_start_sunset).state;
+          int l7_down_e = (int)id(l7_h_end_sunset).state * 60 + (int)id(l7_m_end_sunset).state;
+
+          // Wschód L7 (Tło)
+          if (current_total_min == l7_up_s) {
+              float dur = max(1, (l7_up_e - l7_up_s)) * 60000.0f;
+              id(lampa7).make_call().set_brightness(id(pwr_l7).state/100.0f).set_transition_length(dur).perform();
+          }
+          // Zachód L7 (Tło)
+          if (current_total_min == l7_down_s) {
+              float dur = max(1, (l7_down_e - l7_down_s)) * 60000.0f;
+              id(lampa7).turn_off().set_transition_length(dur).perform();
+          }
