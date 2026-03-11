@@ -1,7 +1,7 @@
 esphome:
   name: esp-light
 
-# FIX DLA DS3231: Wymuszenie pracy na baterii
+# FIX DLA DS3231: Wymuszenie pracy na baterii  sd
   on_boot:
     priority: -100 
     then:
