@@ -48,7 +48,7 @@ esphome:
           };
 
           // Rozpalanie L1-L6 jeśli prąd wrócił w dzień
-          if (cur_min >= m_up_e && cur_min < m_dn_s) {
+          if (cur_min >= m_up_e && cur_min < m_dn_s) {  
               ESP_LOGW("SOFT_START", "Dzień! Rozpalam L1-L6...");
               soft_start_light(id(lampa1), id(pwr_l1).state/100.0f, id(auto_l1).state);
               soft_start_light(id(lampa2), id(pwr_l2).state/100.0f, id(auto_l2).state);
@@ -65,6 +65,25 @@ esphome:
               ESP_LOGW("SOFT_START", "Dzień! Rozpalam L7...");
               soft_start_light(id(lampa7), id(pwr_l7).state/100.0f, id(auto_l7).state);
           }
+          
+          // 2. DODAJ TO: Synchronizacja pasków z boxami przy starcie
+          // Pobieramy wartość z boxa (0-100) i zamieniamy na jasność (0.0-1.0)
+          
+          auto set_initial_brightness = [&](light::LightState* l, float val_percent) {
+            auto call = l->make_call();
+            call.set_brightness(val_percent / 100.0f);
+            call.perform();
+          };
+
+          set_initial_brightness(id(lampa1), id(pwr_l1).state);
+          set_initial_brightness(id(lampa2), id(pwr_l2).state);
+          set_initial_brightness(id(lampa3), id(pwr_l3).state);
+          set_initial_brightness(id(lampa4), id(pwr_l4).state);
+          set_initial_brightness(id(lampa5), id(pwr_l5).state);
+          set_initial_brightness(id(lampa6), id(pwr_l6).state);
+          set_initial_brightness(id(lampa7), id(pwr_l7).state);
+
+          ESP_LOGI("BOOT", "Paski zsynchronizowane z boxami!");
 
 
 
@@ -73,10 +92,11 @@ esp32:
   framework: { type: arduino }
 
 preferences:
-  flash_write_interval: 10s
+  flash_write_interval: 1min
 
 logger:
   level: INFO
+  baud_rate: 0 # Wyłącza logowanie po USB, jeśli nie używasz, co odciąża procek
   logs:
     text_sensor: ERROR
 
@@ -101,6 +121,7 @@ i2c:
   sda: 21
   scl: 22
   scan: true
+  frequency: 400kHz
 
 time:
   - platform: ds1307
@@ -153,6 +174,39 @@ output:
   - { platform: ledc, pin: 17, id: out_green, inverted: true }
   - { platform: ledc, pin: 18, id: out_blue, inverted: true }
 
+
+globals:
+  - id: g_pwr_l1
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+  - id: g_pwr_l2
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+  - id: g_pwr_l3
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+  - id: g_pwr_l4
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+  - id: g_pwr_l5
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+  - id: g_pwr_l6
+    type: float
+    restore_value: yes
+    initial_value: '100.0'
+  - id: g_pwr_l7
+    type: float
+    restore_value: yes
+    initial_value: '30.0'
+
+
+
 light:
   - platform: monochromatic
     name: "Lampa 1"
@@ -160,42 +214,111 @@ light:
     id: lampa1
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa1).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l1).state - v) > 0.5) {
+              id(pwr_l1).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+  
   - platform: monochromatic
     name: "Lampa 2"
     output: out_lampa2
     id: lampa2
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa2).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l2).state - v) > 0.5) {
+              id(pwr_l2).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+
+
   - platform: monochromatic
     name: "Lampa 3"
     output: out_lampa3
     id: lampa3
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa3).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l3).state - v) > 0.5) {
+              id(pwr_l3).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+
+
   - platform: monochromatic
     name: "Lampa 4"
     output: out_lampa4
     id: lampa4
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa4).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l4).state - v) > 0.5) {
+              id(pwr_l4).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+
+
   - platform: monochromatic
     name: "Lampa 5"
     output: out_lampa5
     id: lampa5
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa5).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l5).state - v) > 0.5) {
+              id(pwr_l5).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+
+
   - platform: monochromatic
     name: "Lampa 6"
     output: out_lampa6
     id: lampa6
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa6).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l6).state - v) > 0.5) {
+              id(pwr_l6).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+
+
   - platform: monochromatic
     name: "Lampa 7"
     output: out_lampa7
     id: lampa7
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    on_state:
+      then:
+        - lambda: |-
+            float v = id(lampa7).remote_values.get_brightness() * 100.0;
+            // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
+            if (abs(id(pwr_l7).state - v) > 0.5) {
+              id(pwr_l7).publish_state(v); // Aktualizuje cyferki w boxie
+            }    
+
+
   - platform: rgb
     name: "Oświetlenie RGB"
     red: out_red
@@ -272,9 +395,12 @@ display:
       // --- NAGŁÓWEK (Zawsze widoczny) ---
       it.strftime(0, 0, id(font_small), "%Y-%m-%d  %H:%M:%S", id(ds_time).now());
       it.line(0, 13, 127, 13); 
+      //it.draw_line(0, 12, 127, 12); // Używamy draw_line zamiast line (często szybciej)
 
+
+      bool show_main = (id(ds_time).now().second % 10 < 5);
       // Logika przełączania widoków (5 sekund na widok)
-      if ((millis() / 5000) % 2 == 0) {
+      if (show_main) {
         // --- EKRAN 1: LAMPY GŁÓWNE (L1-L6) ---
         //it.print(0, 16, id(font_small), "GŁÓWNE (L1-L6)");
         
@@ -315,15 +441,10 @@ font:
   - file: "gfonts://Roboto"
     id: font_small
     size: 12
+    # antialias: false
     glyphs: 
       # Poniżej w cudzysłowie jest spacja oraz wszystkie standardowe znaki i polskie litery
       - " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,-_:;()!%/ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-
-globals:
-  - id: natezenie_max_l1
-    type: float
-    restore_value: yes
-    initial_value: '1.0'
 
 
 
@@ -576,22 +697,34 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 100
+    # optimistic: true
+    lambda: "return id(g_pwr_l1);"
+    # restore_value: yes
+    # initial_value: 100
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa1).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l1).state || id(lampa1).remote_values.is_on()) {
-                auto call = id(lampa1).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa1).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l1) = x;
+
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa1).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa1).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
-  
   
   
   - platform: template
@@ -601,20 +734,32 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 100
+    # optimistic: true
+    lambda: "return id(g_pwr_l2);"
+    # restore_value: yes
+    # initial_value: 100
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa2).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l2).state || id(lampa2).remote_values.is_on()) {
-                auto call = id(lampa2).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa2).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l2) = x;
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa2).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa2).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
   
 
@@ -626,20 +771,32 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 100
+    # optimistic: true
+    # restore_value: yes
+    lambda: "return id(g_pwr_l3);"
+    # initial_value: 100
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa3).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l3).state || id(lampa3).remote_values.is_on()) {
-                auto call = id(lampa3).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa3).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l3) = x;
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa3).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa3).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
   
 
@@ -653,20 +810,32 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 100
+    # optimistic: true
+    # restore_value: yes
+    lambda: "return id(g_pwr_l4);"
+    # initial_value: 100
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa4).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l4).state || id(lampa4).remote_values.is_on()) {
-                auto call = id(lampa4).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa4).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l4) = x;
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa4).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa4).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
   
 
@@ -679,20 +848,32 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 100
+    # optimistic: true
+    # restore_value: yes
+    lambda: "return id(g_pwr_l5);"
+    # initial_value: 100
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa5).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l5).state || id(lampa5).remote_values.is_on()) {
-                auto call = id(lampa5).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa5).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l5) = x;
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa5).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa5).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
   
     
@@ -704,20 +885,32 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 100
+    # optimistic: true
+    # restore_value: yes
+    lambda: "return id(g_pwr_l6);"
+    # initial_value: 100
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa6).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l6).state || id(lampa6).remote_values.is_on()) {
-                auto call = id(lampa6).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa6).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l6) = x;
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa6).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa6).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
 
 
@@ -728,20 +921,32 @@ number:
     max_value: 100
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 30
+    # optimistic: true
+    # restore_value: yes
+    lambda: "return id(g_pwr_l7);"
+    # initial_value: 30
     on_value:
       then:
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa7).remote_values.get_brightness() - nb) > 0.005) {
-              // Aktualizuj tylko jeśli tryb AUTO jest OFF lub lampa już świeci
-              if (!id(auto_l7).state || id(lampa7).remote_values.is_on()) {
-                auto call = id(lampa7).make_call();
-                call.set_brightness(nb);
-                call.perform();
-              }
+              auto call = id(lampa7).make_call();
+              call.set_brightness(nb);
+              call.perform();
+            }
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Zapisz do pamięci Flash (globals)
+            id(g_pwr_l7) = x;
+            float nb = x / 100.0;
+            // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
+            if (abs(id(lampa7).remote_values.get_brightness() - nb) > 0.005) {
+              auto call = id(lampa7).make_call();
+              call.set_brightness(nb);
+              // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
+              // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
+              call.perform();
             }  
   
 
