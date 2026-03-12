@@ -558,7 +558,7 @@ number:
     initial_value: 22
   
   - platform: template
-    name: "16 Tło koniec wieczora ()"
+    name: "16 Tło koniec wieczora (m)"
     id: l7_m_end_sunset
     min_value: 0
     max_value: 59
