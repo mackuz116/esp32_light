@@ -89,7 +89,10 @@ esphome:
 
 esp32:
   board: esp32dev
-  framework: { type: arduino }
+  # framework: { type: arduino }
+  framework:
+    type: esp-idf
+
 
 preferences:
   flash_write_interval: 1min
@@ -99,6 +102,10 @@ logger:
   baud_rate: 0 # Wyłącza logowanie po USB, jeśli nie używasz, co odciąża procek
   logs:
     text_sensor: ERROR
+
+debug:
+  update_interval: 10s
+
 
 api:
   encryption: { key: !secret api_encryption_key }
@@ -138,41 +145,68 @@ output:
   - platform: ledc
     pin: 12
     id: out_lampa1
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
   - platform: ledc
     pin: 13
     id: out_lampa2
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
   - platform: ledc
     pin: 14
     id: out_lampa3
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
   - platform: ledc
     pin: 26
     id: out_lampa4
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
   - platform: ledc
     pin: 25
     id: out_lampa5
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
   - platform: ledc
     pin: 33
     id: out_lampa6
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
   - platform: ledc
     pin: 32
     id: out_lampa7
-    inverted: true
+    inverted: false
+    # bit_depth: 12
     frequency: 1000Hz
-  - { platform: ledc, pin: 16, id: out_red, inverted: true }
-  - { platform: ledc, pin: 17, id: out_green, inverted: true }
-  - { platform: ledc, pin: 18, id: out_blue, inverted: true }
+  - { platform: ledc, pin: 16, id: out_red, inverted: false }
+  - { platform: ledc, pin: 17, id: out_green, inverted: false }
+  - { platform: ledc, pin: 18, id: out_blue, inverted: false }
+
+
+
+binary_sensor:
+  - platform: status
+    name: "Status Połączenia ESP"
+    id: esp_status
+    icon: "mdi:wifi"
+
+sensor:
+  - platform: uptime
+    name: "Czas pracy ESP"
+    id: esp_uptime
+    icon: "mdi:timer"
+  - platform: internal_temperature
+    name: "Temperatura Procesora ESP32"
+    id: esp_temp
+    update_interval: 30s    
+  - platform: wifi_signal
+    name: "Sygnał WiFi"  
 
 
 globals:
@@ -204,6 +238,60 @@ globals:
     type: float
     restore_value: yes
     initial_value: '30.0'
+
+
+
+  # Lampy Główne (L1-L6)
+  - id: g_h_start_sunrise
+    type: int
+    restore_value: yes
+  - id: g_m_start_sunrise
+    type: int
+    restore_value: yes
+  - id: g_h_end_sunrise
+    type: int
+    restore_value: yes
+  - id: g_m_end_sunrise
+    type: int
+    restore_value: yes
+  - id: g_h_start_sunset
+    type: int
+    restore_value: yes
+  - id: g_m_start_sunset
+    type: int
+    restore_value: yes
+  - id: g_h_end_sunset
+    type: int
+    restore_value: yes
+  - id: g_m_end_sunset
+    type: int
+    restore_value: yes
+
+  # Lampa Tło (L7)
+  - id: g_l7_h_start_sunrise
+    type: int
+    restore_value: yes
+  - id: g_l7_m_start_sunrise
+    type: int
+    restore_value: yes
+  - id: g_l7_h_end_sunrise
+    type: int
+    restore_value: yes
+  - id: g_l7_m_end_sunrise
+    type: int
+    restore_value: yes
+  - id: g_l7_h_start_sunset
+    type: int
+    restore_value: yes
+  - id: g_l7_m_start_sunset
+    type: int
+    restore_value: yes
+  - id: g_l7_h_end_sunset
+    type: int
+    restore_value: yes
+  - id: g_l7_m_end_sunset
+    type: int
+    restore_value: yes    
 
 
 
@@ -453,7 +541,7 @@ text_sensor:
     name: "Czas z Internetu (NTP)"
     id: ntp_time_www
     icon: "mdi:clock-outline"
-    update_interval: 1s
+    update_interval: 10s
     lambda: |-
       return id(sntp_time).now().strftime("%Y-%m-%d %H:%M:%S");
 
@@ -461,9 +549,111 @@ text_sensor:
     name: "Czas z Modułu (RTC)"
     id: rtc_time_www
     icon: "mdi:chip"
-    update_interval: 1s
+    update_interval: 10s
     lambda: |-
       return id(ds_time).now().strftime("%Y-%m-%d %H:%M:%S");
+
+  # --- SYNC LAMPY GŁÓWNE ---
+  - platform: homeassistant
+    id: sync_start_sunrise
+    entity_id: input_datetime.akwarium_start_poranka
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_h_start_sunrise) = h; id(g_m_start_sunrise) = m;
+              id(h_start_sunrise).publish_state(h); id(m_start_sunrise).publish_state(m);
+            }
+
+  - platform: homeassistant
+    id: sync_end_sunrise
+    entity_id: input_datetime.akwarium_koniec_poranka
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_h_end_sunrise) = h; id(g_m_end_sunrise) = m;
+              id(h_end_sunrise).publish_state(h); id(m_end_sunrise).publish_state(m);
+            }
+
+  - platform: homeassistant
+    id: sync_start_sunset
+    entity_id: input_datetime.akwarium_start_zachodu
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_h_start_sunset) = h; id(g_m_start_sunset) = m;
+              id(h_start_sunset).publish_state(h); id(m_start_sunset).publish_state(m);
+            }
+
+  - platform: homeassistant
+    id: sync_end_sunset
+    entity_id: input_datetime.akwarium_koniec_zachodu
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_h_end_sunset) = h; id(g_m_end_sunset) = m;
+              id(h_end_sunset).publish_state(h); id(m_end_sunset).publish_state(m);
+            }
+
+  # --- SYNC LAMPA TŁO (L7) ---
+  - platform: homeassistant
+    id: sync_l7_start_sunrise
+    entity_id: input_datetime.tlo_start_poranka
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_l7_h_start_sunrise) = h; id(g_l7_m_start_sunrise) = m;
+              id(l7_h_start_sunrise).publish_state(h); id(l7_m_start_sunrise).publish_state(m);
+            }
+
+  - platform: homeassistant
+    id: sync_l7_end_sunrise
+    entity_id: input_datetime.tlo_koniec_poranka
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_l7_h_end_sunrise) = h; id(g_l7_m_end_sunrise) = m;
+              id(l7_h_end_sunrise).publish_state(h); id(l7_m_end_sunrise).publish_state(m);
+            }
+
+  - platform: homeassistant
+    id: sync_l7_start_sunset
+    entity_id: input_datetime.tlo_start_zachodu
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_l7_h_start_sunset) = h; id(g_l7_m_start_sunset) = m;
+              id(l7_h_start_sunset).publish_state(h); id(l7_m_start_sunset).publish_state(m);
+            }
+
+  - platform: homeassistant
+    id: sync_l7_end_sunset
+    entity_id: input_datetime.tlo_koniec_zachodu
+    on_value:
+      then:
+        - lambda: |-
+            int h, m;
+            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
+              id(g_l7_h_end_sunset) = h; id(g_l7_m_end_sunset) = m;
+              id(l7_h_end_sunset).publish_state(h); id(l7_m_end_sunset).publish_state(m);
+            }
+
+
+
+
 
 
 switch:
@@ -519,9 +709,17 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 10
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 10
+    lambda: "return id(g_h_start_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_h_start_sunrise) = x; // Zapisz do pamięci
+            id(h_start_sunrise).publish_state(x); // Odśwież widok w HA
 
   - platform: template
     name: "02 Lampy start poranka (m)"
@@ -530,9 +728,19 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 30
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 30
+    lambda: "return id(g_m_start_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_m_start_sunrise) = x; // Zapisz do pamięci
+            id(m_start_sunrise).publish_state(x); // Odśwież widok w HA
+
+
 
   - platform: template
     name: "03 Lampy koniec poranka (h)"
@@ -541,9 +749,18 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 11
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 11
+    lambda: "return id(g_h_end_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_h_end_sunrise) = x; // Zapisz do pamięci
+            id(h_end_sunrise).publish_state(x); // Odśwież widok w HA
+
   
   - platform: template
     name: "04 Lampy koniec poranka (m)"
@@ -552,9 +769,18 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 0
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 0
+    lambda: "return id(g_m_end_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_m_end_sunrise) = x; // Zapisz do pamięci
+            id(m_end_sunrise).publish_state(x); // Odśwież widok w HA
+
 
   - platform: template
     name: "05 Lampy start wieczora (h)"
@@ -563,10 +789,16 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 18
-  
+    lambda: "return id(g_h_start_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_h_start_sunset) = x; // Zapisz do pamięci
+            id(h_start_sunset).publish_state(x); // Odśwież widok w HA
+
+
   - platform: template
     name: "06 Lampy start wieczora (m)"
     id: m_start_sunset
@@ -574,10 +806,20 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 0
-  
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 0
+    lambda: "return id(g_m_start_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_m_start_sunset) = x; // Zapisz do pamięci
+            id(m_start_sunset).publish_state(x); // Odśwież widok w HA
+
+
+
   - platform: template
     name: "07 Lampy koniec wieczora (h)"
     id: h_end_sunset
@@ -585,10 +827,19 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 19
-  
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 19
+    lambda: "return id(g_h_end_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_h_end_sunset) = x; // Zapisz do pamięci
+            id(h_end_sunset).publish_state(x); // Odśwież widok w HA
+
+
   - platform: template
     name: "08 Lampy koniec wieczora (m)"
     id: m_end_sunset
@@ -596,9 +847,18 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 0
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 0
+    lambda: "return id(g_m_end_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_m_end_sunset) = x; // Zapisz do pamięci
+            id(m_end_sunset).publish_state(x); // Odśwież widok w HA
+
 
   # --- TŁO (L7) ---
   - platform: template
@@ -608,9 +868,18 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 8
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 8
+    lambda: "return id(g_l7_h_start_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_h_start_sunrise) = x; // Zapisz do pamięci
+            id(l7_h_start_sunrise).publish_state(x); // Odśwież widok w HA
+
   
   - platform: template
     name: "10 Tło start poranka (m)"
@@ -619,9 +888,18 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 0
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 0
+    lambda: "return id(g_l7_m_start_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_m_start_sunrise) = x; // Zapisz do pamięci
+            id(l7_m_start_sunrise).publish_state(x); // Odśwież widok w HA
+
 
   - platform: template
     name: "11 Tło koniec poranka (h)"
@@ -630,9 +908,19 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 9
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 9
+    lambda: "return id(g_l7_h_end_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_h_end_sunrise) = x; // Zapisz do pamięci
+            id(l7_h_end_sunrise).publish_state(x); // Odśwież widok w HA
+
+
   
   - platform: template
     name: "12 Tło koniec poranka (m)"
@@ -641,9 +929,18 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 0
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 0
+    lambda: "return id(g_l7_m_end_sunrise);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_m_end_sunrise) = x; // Zapisz do pamięci
+            id(l7_m_end_sunrise).publish_state(x); // Odśwież widok w HA
+
 
   - platform: template
     name: "13 Tło start wieczora (h)"
@@ -652,10 +949,20 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 20
-  
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 20
+    lambda: "return id(g_l7_h_start_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_h_start_sunset) = x; // Zapisz do pamięci
+            id(l7_h_start_sunset).publish_state(x); // Odśwież widok w HA
+
+
+
   - platform: template
     name: "14 Tło start wieczora (m)"
     id: l7_m_start_sunset
@@ -663,9 +970,18 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 0
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 0
+    lambda: "return id(g_l7_m_start_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_m_start_sunset) = x; // Zapisz do pamięci
+            id(l7_m_start_sunset).publish_state(x); // Odśwież widok w HA
+
 
   - platform: template
     name: "15 Tło koniec wieczora (h)"
@@ -674,10 +990,19 @@ number:
     max_value: 23
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 22
-  
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 22
+    lambda: "return id(g_l7_h_end_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_h_end_sunset) = x; // Zapisz do pamięci
+            id(l7_h_end_sunset).publish_state(x); // Odśwież widok w HA
+
+
   - platform: template
     name: "16 Tło koniec wieczora (m)"
     id: l7_m_end_sunset
@@ -685,9 +1010,19 @@ number:
     max_value: 59
     step: 1
     mode: box
-    optimistic: true
-    restore_value: yes
-    initial_value: 30
+    # optimistic: true
+    # restore_value: yes
+    # initial_value: 30
+    lambda: "return id(g_l7_m_end_sunset);"
+    
+    # 2. ZAPIS (nie może być return)
+    set_action:
+      then:
+        - lambda: |-
+            id(g_l7_m_end_sunset) = x; // Zapisz do pamięci
+            id(l7_m_end_sunset).publish_state(x); // Odśwież widok w HA
+
+
 
   # --- MOCE INDYWIDUALNE DLA KAŻDEJ LAMPY (Boxy) ---
   - platform: template
@@ -955,6 +1290,21 @@ interval:
   - interval: 1min
     then:
       - lambda: |-
+
+          // --- LOGICZNY WATCHDOG (WDG) ---
+          // 1. Sprawdzenie Temperatury (Wymaga sensora internal_temperature o id: esp_temp)
+          if (id(esp_temp).state > 80.0) {
+            ESP_LOGE("WDG", "KRYTYCZNA TEMPERATURA: %.1f°C! Restart systemu...", id(esp_temp).state);
+            arch_restart();
+          }
+
+          // 2. Sprawdzenie Pamięci RAM (Zapobieganie zawieszeniu)
+          if (esp_get_free_heap_size() < 20480) { // Jeśli spadnie poniżej 20KB
+            ESP_LOGE("WDG", "MAŁO PAMIĘCI RAM! Restart prewencyjny...");
+            arch_restart();
+          }
+
+
           auto now = id(ds_time).now();
           int cur_min = now.hour * 60 + now.minute;
 
