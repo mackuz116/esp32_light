@@ -2,12 +2,11 @@ esphome:
   name: esp-light
   project:
     name: "mackuz.esp-light"
-    version: "1.0"
-
+    version: "1.1"
   on_boot:
     priority: 600
     then:
-      # Natychmiastowe upewnienie się, że lampy są ciemne
+      # 1. Wyciszamy piny PWM na starcie
       - light.turn_off: { id: lampa1, transition_length: 0s }
       - light.turn_off: { id: lampa2, transition_length: 0s }
       - light.turn_off: { id: lampa3, transition_length: 0s }
@@ -16,82 +15,19 @@ esphome:
       - light.turn_off: { id: lampa6, transition_length: 0s }
       - light.turn_off: { id: lampa7, transition_length: 0s }      
       
-      - delay: 4s 
+      - delay: 5s 
       - lambda: |-
-          // 1. Synchronizacja i Fix RTC
-          uint8_t status = 0;
-          id(ds_time).read_byte(0x0F, &status);
+          // 2. Fix dla modułu RTC DS3231
           id(ds_time).write_byte(0x0E, 0x00);
           id(ds_time).write_byte(0x0F, 0x00);
           id(ds_time).update();
-
-          auto now = id(ds_time).now();
-          if (!now.is_valid()) {
-            ESP_LOGE("BOOT", "Czas nieprawidłowy!");
-            return;
-          }
-
-          int cur_min = now.hour * 60 + now.minute;
-          int m_up_e = (int)id(h_end_sunrise).state * 60 + (int)id(m_end_sunrise).state;
-          int m_dn_s = (int)id(h_start_sunset).state * 60 + (int)id(m_start_sunset).state;
-          float soft_ms = 120000.0f; // 2 minuty
-
-          // Funkcja pomocnicza do bezpiecznego rozpalania
-          auto soft_start_light = [&](light::LightState* l, float target, bool auto_st) {
-            if (auto_st) {
-              auto call = l->make_call();
-              call.set_state(true); // <--- Wymusza status ON w interfejsie
-              call.set_brightness(target);
-              call.set_transition_length(soft_ms);
-              call.perform();
-            }
-          };
-
-          // Rozpalanie L1-L6 jeśli prąd wrócił w dzień
-          if (cur_min >= m_up_e && cur_min < m_dn_s) {  
-              ESP_LOGW("SOFT_START", "Dzień! Rozpalam L1-L6...");
-              soft_start_light(id(lampa1), id(pwr_l1).state/100.0f, id(auto_l1).state);
-              soft_start_light(id(lampa2), id(pwr_l2).state/100.0f, id(auto_l2).state);
-              soft_start_light(id(lampa3), id(pwr_l3).state/100.0f, id(auto_l3).state);
-              soft_start_light(id(lampa4), id(pwr_l4).state/100.0f, id(auto_l4).state);
-              soft_start_light(id(lampa5), id(pwr_l5).state/100.0f, id(auto_l5).state);
-              soft_start_light(id(lampa6), id(pwr_l6).state/100.0f, id(auto_l6).state);
-          }
-
-          // Rozpalanie L7 (ma inne godziny)
-          int l7_up_e = (int)id(l7_h_end_sunrise).state * 60 + (int)id(l7_m_end_sunrise).state;
-          int l7_dn_s = (int)id(l7_h_start_sunset).state * 60 + (int)id(l7_m_start_sunset).state;
-          if (cur_min >= l7_up_e && cur_min < l7_dn_s) {
-              ESP_LOGW("SOFT_START", "Dzień! Rozpalam L7...");
-              soft_start_light(id(lampa7), id(pwr_l7).state/100.0f, id(auto_l7).state);
-          }
-          
-          // 2. DODAJ TO: Synchronizacja pasków z boxami przy starcie
-          // Pobieramy wartość z boxa (0-100) i zamieniamy na jasność (0.0-1.0)
-          
-          auto set_initial_brightness = [&](light::LightState* l, float val_percent) {
-            auto call = l->make_call();
-            call.set_brightness(val_percent / 100.0f);
-            call.perform();
-          };
-
-          set_initial_brightness(id(lampa1), id(pwr_l1).state);
-          set_initial_brightness(id(lampa2), id(pwr_l2).state);
-          set_initial_brightness(id(lampa3), id(pwr_l3).state);
-          set_initial_brightness(id(lampa4), id(pwr_l4).state);
-          set_initial_brightness(id(lampa5), id(pwr_l5).state);
-          set_initial_brightness(id(lampa6), id(pwr_l6).state);
-          set_initial_brightness(id(lampa7), id(pwr_l7).state);
-
-          ESP_LOGI("BOOT", "Paski zsynchronizowane z boxami!");
+          ESP_LOGI("BOOT", "RTC zsynchronizowane, lampy czekają na pierwszy cykl interval.");
 
 
 
 esp32:
   board: esp32dev
-  # framework: { type: arduino }
-  framework:
-    type: esp-idf
+  framework: { type: arduino }
 
 
 preferences:
@@ -201,13 +137,16 @@ sensor:
     name: "Czas pracy ESP"
     id: esp_uptime
     icon: "mdi:timer"
+
   - platform: internal_temperature
     name: "Temperatura Procesora ESP32"
     id: esp_temp
     update_interval: 30s    
-  - platform: wifi_signal
-    name: "Sygnał WiFi"  
 
+  - platform: wifi_signal
+    name: "Sygnał WiFi"
+    id: wifi_sig # Dodaj ID
+    update_interval: 60s
 
 globals:
   - id: g_pwr_l1
@@ -245,54 +184,79 @@ globals:
   - id: g_h_start_sunrise
     type: int
     restore_value: yes
+    initial_value: '10'  
   - id: g_m_start_sunrise
     type: int
     restore_value: yes
+    initial_value: '0'
   - id: g_h_end_sunrise
     type: int
     restore_value: yes
+    initial_value: '11'
   - id: g_m_end_sunrise
     type: int
     restore_value: yes
+    initial_value: '0'
   - id: g_h_start_sunset
     type: int
     restore_value: yes
+    initial_value: '18'
   - id: g_m_start_sunset
     type: int
     restore_value: yes
+    initial_value: '0'
   - id: g_h_end_sunset
     type: int
     restore_value: yes
+    initial_value: '19'
   - id: g_m_end_sunset
     type: int
     restore_value: yes
+    initial_value: '0'
 
   # Lampa Tło (L7)
   - id: g_l7_h_start_sunrise
     type: int
     restore_value: yes
+    initial_value: '9'
   - id: g_l7_m_start_sunrise
     type: int
     restore_value: yes
+    initial_value: '0'
   - id: g_l7_h_end_sunrise
     type: int
     restore_value: yes
+    initial_value: '11'
   - id: g_l7_m_end_sunrise
     type: int
     restore_value: yes
+    initial_value: '0'
   - id: g_l7_h_start_sunset
     type: int
     restore_value: yes
+    initial_value: '18'
   - id: g_l7_m_start_sunset
     type: int
     restore_value: yes
+    initial_value: '0'
   - id: g_l7_h_end_sunset
     type: int
     restore_value: yes
+    initial_value: '20'
   - id: g_l7_m_end_sunset
     type: int
-    restore_value: yes    
+    restore_value: yes
+    initial_value: '0'    
 
+  - id: g_grow_offset_start
+    type: int
+    restore_value: yes
+    initial_value: '60'  # Domyślnie 60 minut wcześniej
+
+  - id: g_grow_offset_end
+    type: int
+    restore_value: yes
+    initial_value: '60'  # Domyślnie 60 minut później
 
 
 light:
@@ -789,6 +753,8 @@ number:
     max_value: 23
     step: 1
     mode: box
+    # restore_value: yes
+    # initial_value: 19
     lambda: "return id(g_h_start_sunset);"
     
     # 2. ZAPIS (nie może być return)
@@ -1035,7 +1001,7 @@ number:
     # optimistic: true
     lambda: "return id(g_pwr_l1);"
     # restore_value: yes
-    # initial_value: 100
+    # initial_value: 80
     on_value:
       then:
         - lambda: |-
@@ -1072,7 +1038,7 @@ number:
     # optimistic: true
     lambda: "return id(g_pwr_l2);"
     # restore_value: yes
-    # initial_value: 100
+    # initial_value: 80
     on_value:
       then:
         - lambda: |-
@@ -1109,7 +1075,7 @@ number:
     # optimistic: true
     # restore_value: yes
     lambda: "return id(g_pwr_l3);"
-    # initial_value: 100
+    # initial_value: 80
     on_value:
       then:
         - lambda: |-
@@ -1148,7 +1114,7 @@ number:
     # optimistic: true
     # restore_value: yes
     lambda: "return id(g_pwr_l4);"
-    # initial_value: 100
+    # initial_value: 80
     on_value:
       then:
         - lambda: |-
@@ -1186,7 +1152,7 @@ number:
     # optimistic: true
     # restore_value: yes
     lambda: "return id(g_pwr_l5);"
-    # initial_value: 100
+    # initial_value: 80
     on_value:
       then:
         - lambda: |-
@@ -1220,10 +1186,10 @@ number:
     max_value: 100
     step: 1
     mode: box
-    # optimistic: true
+    # optimistic: truesunri
     # restore_value: yes
     lambda: "return id(g_pwr_l6);"
-    # initial_value: 100
+    # initial_value: 80
     on_value:
       then:
         - lambda: |-
@@ -1254,14 +1220,15 @@ number:
     id: pwr_l7
     min_value: 0
     max_value: 100
+
     step: 1
     mode: box
     # optimistic: true
     # restore_value: yes
     lambda: "return id(g_pwr_l7);"
-    # initial_value: 30
+    # initial_value: 80
     on_value:
-      then:
+      then:    
         - lambda: |-
             float nb = x / 100.0;
             if (abs(id(lampa7).remote_values.get_brightness() - nb) > 0.005) {
@@ -1285,75 +1252,153 @@ number:
             }  
   
 
+  - platform: template
+    name: "GROW Start Offset (min)"
+    id: grow_offset_start_ui
+    min_value: 0
+    max_value: 120
+    step: 5
+    unit_of_measurement: "min"
+    restore_value: true
+    initial_value: 60
+    optimistic: true
+    on_value:
+      then:
+        - lambda: 'id(g_grow_offset_start) = (int)x;'
+
+  - platform: template
+    name: "GROW Koniec Offset (min)"
+    id: grow_offset_end_ui
+    min_value: 0
+    max_value: 120
+    step: 5
+    unit_of_measurement: "min"
+    restore_value: true
+    initial_value: 60
+    optimistic: true
+    on_value:
+      then:
+        - lambda: 'id(g_grow_offset_end) = (int)x;'
+
+
+
+# interval:
+#   - interval: 1min
+#     then:
+#       - lambda: |-
+#           auto now = id(ds_time).now();
+#           if (!now.is_valid()) return;
+#           int cur = now.hour * 60 + now.minute;
+#           static bool is_first_run = true;
+
+#           // Funkcja obliczająca jasność 0.0 - 1.0
+#           auto calc = [&](int su, int eu, int sd, int ed) -> float {
+#             if (cur >= eu && cur < sd) return 1.0f; 
+#             if (cur >= su && cur < eu) return (float)(cur - su) / (float)(eu - su);
+#             if (cur >= sd && cur < ed) return 1.0f - (float)(cur - sd) / (float)(ed - sd);
+#             return 0.0f;
+#           };
+
+#           // Obliczamy czasy L1-L6 bezpośrednio z globali (pamięć Flash)
+#           int s_u = id(g_h_start_sunrise) * 60 + id(g_m_start_sunrise);
+#           int e_u = id(g_h_end_sunrise) * 60 + id(g_m_end_sunrise);
+#           int s_d = id(g_h_start_sunset) * 60 + id(g_m_start_sunset);
+#           int e_d = id(g_h_end_sunset) * 60 + id(g_m_end_sunset);
+#           float br_main = calc(s_u, e_u, s_d, e_d);
+
+#           auto apply = [&](light::LightState* l, float b, bool auto_m, float pwr_val) {
+#             if (auto_m) {
+#               float target = b * (pwr_val / 100.0f);
+#               auto call = l->make_call();
+#               call.set_brightness(target);
+#               call.set_state(target > 0.005);
+#               call.set_transition_length(is_first_run ? 120000 : 55000);
+#               call.perform();
+#             }
+#           };
+
+#           // Aplikacja mocy z globali
+#           apply(id(lampa1), br_main, id(auto_l1).state, id(g_pwr_l1));
+#           apply(id(lampa2), br_main, id(auto_l2).state, id(g_pwr_l2));
+#           apply(id(lampa3), br_main, id(auto_l3).state, id(g_pwr_l3));
+#           apply(id(lampa4), br_main, id(auto_l4).state, id(g_pwr_l4));
+#           apply(id(lampa5), br_main, id(auto_l5).state, id(g_pwr_l5));
+#           apply(id(lampa6), br_main, id(auto_l6).state, id(g_pwr_l6));
+
+#           // Obliczenia i aplikacja dla L7 (Tło)
+#           int l7_su = id(g_l7_h_start_sunrise) * 60 + id(g_l7_m_start_sunrise);
+#           int l7_eu = id(g_l7_h_end_sunrise) * 60 + id(g_l7_m_end_sunrise);
+#           int l7_sd = id(g_l7_h_start_sunset) * 60 + id(g_l7_m_start_sunset);
+#           int l7_ed = id(g_l7_h_end_sunset) * 60 + id(g_l7_m_end_sunset);
+#           apply(id(lampa7), calc(l7_su, l7_eu, l7_sd, l7_ed), id(auto_l7).state, id(g_pwr_l7));
+
+#           is_first_run = false;
+
 
 interval:
   - interval: 1min
     then:
       - lambda: |-
-
-          // --- LOGICZNY WATCHDOG (WDG) ---
-          // 1. Sprawdzenie Temperatury (Wymaga sensora internal_temperature o id: esp_temp)
-          if (id(esp_temp).state > 80.0) {
-            ESP_LOGE("WDG", "KRYTYCZNA TEMPERATURA: %.1f°C! Restart systemu...", id(esp_temp).state);
-            arch_restart();
-          }
-
-          // 2. Sprawdzenie Pamięci RAM (Zapobieganie zawieszeniu)
-          if (esp_get_free_heap_size() < 20480) { // Jeśli spadnie poniżej 20KB
-            ESP_LOGE("WDG", "MAŁO PAMIĘCI RAM! Restart prewencyjny...");
-            arch_restart();
-          }
-
-
           auto now = id(ds_time).now();
-          int cur_min = now.hour * 60 + now.minute;
+          if (!now.is_valid()) return;
+          int cur = now.hour * 60 + now.minute;
+          static bool is_first_run = true;
 
-          // Pobranie czasów L1-6
-          int m_up_s = (int)id(h_start_sunrise).state * 60 + (int)id(m_start_sunrise).state;
-          int m_up_e = (int)id(h_end_sunrise).state * 60 + (int)id(m_end_sunrise).state;
-          int m_dn_s = (int)id(h_start_sunset).state * 60 + (int)id(m_start_sunset).state;
-          int m_dn_e = (int)id(h_end_sunset).state * 60 + (int)id(m_end_sunset).state;
+          // Funkcja obliczająca jasność 0.0 - 1.0
+          auto calc = [&](int su, int eu, int sd, int ed) -> float {
+            if (cur >= eu && cur < sd) return 1.0f; 
+            if (cur >= su && cur < eu) return (float)(cur - su) / (float)(eu - su);
+            if (cur >= sd && cur < ed) return 1.0f - (float)(cur - sd) / (float)(ed - sd);
+            return 0.0f;
+          };
 
-          // Pobranie czasów L7
-          int l7_up_s = (int)id(l7_h_start_sunrise).state * 60 + (int)id(l7_m_start_sunrise).state;
-          int l7_up_e = (int)id(l7_h_end_sunrise).state * 60 + (int)id(l7_m_end_sunrise).state;
-          int l7_dn_s = (int)id(l7_h_start_sunset).state * 60 + (int)id(l7_m_start_sunset).state;
-          int l7_dn_e = (int)id(l7_h_end_sunset).state * 60 + (int)id(l7_m_end_sunset).state;
+          // 1. Obliczamy czasy BIAŁYCH (L1, L3, L4, L6)
+          int s_u = id(g_h_start_sunrise) * 60 + id(g_m_start_sunrise);
+          int e_u = id(g_h_end_sunrise) * 60 + id(g_m_end_sunrise);
+          int s_d = id(g_h_start_sunset) * 60 + id(g_m_start_sunset);
+          int e_d = id(g_h_end_sunset) * 60 + id(g_m_end_sunset);
+          float br_white = calc(s_u, e_u, s_d, e_d);
 
-          // Funkcja pomocnicza do wykonania akcji
-          auto run_light = [&](light::LightState* l, float target, float dur_min, bool auto_st) {
-            if (auto_st) {
+          // 2. Obliczamy czasy GROW (L2, L5) - powiązane offsetem
+          int gr_s_u = s_u - id(g_grow_offset_start); 
+          int gr_e_u = e_u;
+          int gr_s_d = s_d;
+          int gr_e_d = e_d + id(g_grow_offset_end);
+          float br_grow = calc(gr_s_u, gr_e_u, gr_s_d, gr_e_d);
+
+          // Funkcja aplikująca z zabezpieczeniem termicznym
+          auto apply = [&](light::LightState* l, float b, bool auto_m, float pwr_val) {
+            if (auto_m) {
+              float target = b * (pwr_val / 100.0f);
+              
+              // Ficzerek: Bezpiecznik termiczny (jeśli ESP na lampie > 72°C)
+              if (id(esp_temp).state > 72.0) {
+                target *= 0.8;
+              }
+
               auto call = l->make_call();
               call.set_brightness(target);
-              call.set_transition_length(dur_min * 60000.0f);
+              call.set_state(target > 0.005);
+              call.set_transition_length(is_first_run ? 120000 : 55000);
               call.perform();
             }
           };
 
-          // --- OBSŁUGA LAMP L1-L6 ---
-          if (cur_min == m_up_s) {
-            float d = max(1, m_up_e - m_up_s);
-            run_light(id(lampa1), id(pwr_l1).state/100.0f, d, id(auto_l1).state);
-            run_light(id(lampa2), id(pwr_l2).state/100.0f, d, id(auto_l2).state);
-            run_light(id(lampa3), id(pwr_l3).state/100.0f, d, id(auto_l3).state);
-            run_light(id(lampa4), id(pwr_l4).state/100.0f, d, id(auto_l4).state);
-            run_light(id(lampa5), id(pwr_l5).state/100.0f, d, id(auto_l5).state);
-            run_light(id(lampa6), id(pwr_l6).state/100.0f, d, id(auto_l6).state);
-          }
-          if (cur_min == m_dn_s) {
-            float d = max(1, m_dn_e - m_dn_s);
-            run_light(id(lampa1), 0.0, d, id(auto_l1).state);
-            run_light(id(lampa2), 0.0, d, id(auto_l2).state);
-            run_light(id(lampa3), 0.0, d, id(auto_l3).state);
-            run_light(id(lampa4), 0.0, d, id(auto_l4).state);
-            run_light(id(lampa5), 0.0, d, id(auto_l5).state);
-            run_light(id(lampa6), 0.0, d, id(auto_l6).state);
-          }
+          // Aplikacja na kanały BIAŁE
+          apply(id(lampa1), br_white, id(auto_l1).state, id(g_pwr_l1));
+          apply(id(lampa3), br_white, id(auto_l3).state, id(g_pwr_l3));
+          apply(id(lampa4), br_white, id(auto_l4).state, id(g_pwr_l4));
+          apply(id(lampa6), br_white, id(auto_l6).state, id(g_pwr_l6));
 
-          // --- OBSŁUGA LAMPY L7 ---
-          if (cur_min == l7_up_s) {
-            run_light(id(lampa7), id(pwr_l7).state/100.0f, max(1, l7_up_e - l7_up_s), id(auto_l7).state);
-          }
-          if (cur_min == l7_dn_s) {
-            run_light(id(lampa7), 0.0, max(1, l7_dn_e - l7_dn_s), id(auto_l7).state);
-          }
+          // Aplikacja na kanały GROW (L2 i L5)
+          apply(id(lampa2), br_grow, id(auto_l2).state, id(g_pwr_l2));
+          apply(id(lampa5), br_grow, id(auto_l5).state, id(g_pwr_l5));
+
+          // Obliczenia i aplikacja dla L7 (Tło) - zsynchronizowane z białymi
+          int l7_su = id(g_l7_h_start_sunrise) * 60 + id(g_l7_m_start_sunrise);
+          int l7_eu = id(g_l7_h_end_sunrise) * 60 + id(g_l7_m_end_sunrise);
+          int l7_sd = id(g_l7_h_start_sunset) * 60 + id(g_l7_m_start_sunset);
+          int l7_ed = id(g_l7_h_end_sunset) * 60 + id(g_l7_m_end_sunset);
+          apply(id(lampa7), calc(l7_su, l7_eu, l7_sd, l7_ed), id(auto_l7).state, id(g_pwr_l7));
+
+          is_first_run = false;
