@@ -258,119 +258,10 @@ globals:
     restore_value: yes
     initial_value: '60'  # Domyślnie 60 minut później
 
-
-# light:
-#   - platform: monochromatic
-#     name: "Lampa 1"
-#     output: out_lampa1
-#     id: lampa1
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa1).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l1).state - v) > 0.5) {
-#               id(pwr_l1).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-  
-#   - platform: monochromatic
-#     name: "Lampa 2"
-#     output: out_lampa2
-#     id: lampa2
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa2).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l2).state - v) > 0.5) {
-#               id(pwr_l2).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-
-
-#   - platform: monochromatic
-#     name: "Lampa 3"
-#     output: out_lampa3
-#     id: lampa3
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa3).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l3).state - v) > 0.5) {
-#               id(pwr_l3).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-
-
-#   - platform: monochromatic
-#     name: "Lampa 4"
-#     output: out_lampa4
-#     id: lampa4
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa4).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l4).state - v) > 0.5) {
-#               id(pwr_l4).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-
-
-#   - platform: monochromatic
-#     name: "Lampa 5"
-#     output: out_lampa5
-#     id: lampa5
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa5).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l5).state - v) > 0.5) {
-#               id(pwr_l5).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-
-
-#   - platform: monochromatic
-#     name: "Lampa 6"
-#     output: out_lampa6
-#     id: lampa6
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa6).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l6).state - v) > 0.5) {
-#               id(pwr_l6).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-
-
-#   - platform: monochromatic
-#     name: "Lampa 7"
-#     output: out_lampa7
-#     id: lampa7
-#     restore_mode: ALWAYS_OFF
-#     default_transition_length: 0s
-#     on_state:
-#       then:
-#         - lambda: |-
-#             float v = id(lampa7).remote_values.get_brightness() * 100.0;
-#             // Jeśli różnica między paskiem a boxem jest większa niż 0.5%
-#             if (abs(id(pwr_l7).state - v) > 0.5) {
-#               id(pwr_l7).publish_state(v); // Aktualizuje cyferki w boxie
-#             }    
-
-
+  - id: cloud_factor
+    type: float
+    restore_value: no
+    initial_value: "1.0"
 
 light:
   - platform: monochromatic
@@ -709,6 +600,14 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     icon: "mdi:robot"
+  - platform: template
+    name: "Symulacja Chmur"
+    id: cloud_simulation_switch
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    icon: "mdi:cloud-sync"
+
 
 number:
   # --- GRUPA GŁÓWNA (L1 - L6) ---
@@ -1426,67 +1325,71 @@ number:
 #   - interval: 1min
 #     then:
 #       - lambda: |-
-#           auto now = id(ds_time).now();
-#           if (!now.is_valid()) return;
-#           int cur = now.hour * 60 + now.minute;
 #           static bool is_first_run = true;
+          
+#           // Pobranie czasu
+#           auto now = id(ds_time).now();
+#           int current_min = now.hour * 60 + now.minute;
 
-#           // Funkcja obliczająca jasność 0.0 - 1.0
-#           auto calc = [&](int su, int eu, int sd, int ed) -> float {
-#             if (cur >= eu && cur < sd) return 1.0f; 
-#             if (cur >= su && cur < eu) return (float)(cur - su) / (float)(eu - su);
-#             if (cur >= sd && cur < ed) return 1.0f - (float)(cur - sd) / (float)(ed - sd);
-#             return 0.0f;
+#           // Funkcja pomocnicza do obliczania progresu
+#           auto get_progress = [&](int start_h, int start_m, int end_h, int end_m) -> float {
+#             int start = start_h * 60 + start_m;
+#             int end = end_h * 60 + end_m;
+#             if (start == end) return 0.0f;
+#             if (current_min < start || current_min >= end) return 0.0f;
+#             return (float)(current_min - start) / (float)(end - start);
 #           };
 
-#           // 1. Obliczamy czasy BIAŁYCH (L1, L3, L4, L6)
-#           int s_u = id(g_h_start_sunrise) * 60 + id(g_m_start_sunrise);
-#           int e_u = id(g_h_end_sunrise) * 60 + id(g_m_end_sunrise);
-#           int s_d = id(g_h_start_sunset) * 60 + id(g_m_start_sunset);
-#           int e_d = id(g_h_end_sunset) * 60 + id(g_m_end_sunset);
-#           float br_white = calc(s_u, e_u, s_d, e_d);
+#           // --- DOPASOWANE NAZWY ID ---
+#           // Poranek (Sunrise)
+#           float br_morning = get_progress(id(h_start_sunrise).state, id(m_start_sunrise).state, id(h_end_sunrise).state, id(m_end_sunrise).state);
+          
+#           // Wieczór (Sunset)
+#           float br_evening = 1.0f - get_progress(id(h_start_sunset).state, id(m_start_sunset).state, id(h_end_sunset).state, id(m_end_sunset).state);
+          
+#           // Wybór aktualnego poziomu (b)
+#           float b = 0.0f;
+#           int start_p = id(h_start_sunrise).state * 60 + id(m_start_sunrise).state;
+#           int end_p = id(h_end_sunrise).state * 60 + id(m_end_sunrise).state;
+#           int start_w = id(h_start_sunset).state * 60 + id(m_start_sunset).state;
+#           int end_w = id(h_end_sunset).state * 60 + id(m_end_sunset).state;
 
-#           // 2. Obliczamy czasy GROW (L2, L5) - powiązane offsetem
-#           int gr_s_u = s_u - id(g_grow_offset_start); 
-#           int gr_e_u = e_u;
-#           int gr_s_d = s_d;
-#           int gr_e_d = e_d + id(g_grow_offset_end);
-#           float br_grow = calc(gr_s_u, gr_e_u, gr_s_d, gr_e_d);
+#           if (current_min >= start_p && current_min < end_p) {
+#               b = br_morning; 
+#           } else if (current_min >= end_p && current_min < start_w) {
+#               b = 1.0f;       
+#           } else if (current_min >= start_w && current_min < end_w) {
+#               b = br_evening; 
+#           }
 
-#           // Funkcja aplikująca z zabezpieczeniem termicznym
-#           auto apply = [&](light::LightState* l, float b, bool auto_m, float pwr_val) {
+#           auto apply = [&](light::LightState* l, float progress, bool auto_m, float pwr_val) {
 #             if (auto_m) {
-#               float target = b * (pwr_val / 100.0f);
+#               float target = progress * (pwr_val / 100.0f);
               
-#               // Ficzerek: Bezpiecznik termiczny (jeśli ESP na lampie > 72°C)
-#               if (id(esp_temp).state > 72.0) {
-#                 target *= 0.8;
+#               if (id(esp_temp).state > 75.0) {
+#                 target *= 0.8f;
 #               }
 
-#               auto call = l->make_call();
-#               call.set_brightness(target);
-#               call.set_state(target > 0.005);
-#               call.set_transition_length(is_first_run ? 120000 : 55000);
-#               call.perform();
+#               float current = l->remote_values.get_brightness();
+              
+#               if (abs(current - target) > 0.004f || is_first_run) {
+#                 auto call = l->make_call();
+#                 call.set_brightness(target);
+#                 call.set_state(target > 0.001f);
+#                 call.set_transition_length(is_first_run ? 0 : 59000);
+#                 call.perform();
+#               }
 #             }
 #           };
 
-#           // Aplikacja na kanały BIAŁE
-#           apply(id(lampa1), br_white, id(auto_l1).state, id(g_pwr_l1));
-#           apply(id(lampa3), br_white, id(auto_l3).state, id(g_pwr_l3));
-#           apply(id(lampa4), br_white, id(auto_l4).state, id(g_pwr_l4));
-#           apply(id(lampa6), br_white, id(auto_l6).state, id(g_pwr_l6));
-
-#           // Aplikacja na kanały GROW (L2 i L5)
-#           apply(id(lampa2), br_grow, id(auto_l2).state, id(g_pwr_l2));
-#           apply(id(lampa5), br_grow, id(auto_l5).state, id(g_pwr_l5));
-
-#           // Obliczenia i aplikacja dla L7 (Tło) - zsynchronizowane z białymi
-#           int l7_su = id(g_l7_h_start_sunrise) * 60 + id(g_l7_m_start_sunrise);
-#           int l7_eu = id(g_l7_h_end_sunrise) * 60 + id(g_l7_m_end_sunrise);
-#           int l7_sd = id(g_l7_h_start_sunset) * 60 + id(g_l7_m_start_sunset);
-#           int l7_ed = id(g_l7_h_end_sunset) * 60 + id(g_l7_m_end_sunset);
-#           apply(id(lampa7), calc(l7_su, l7_eu, l7_sd, l7_ed), id(auto_l7).state, id(g_pwr_l7));
+#           // Aplikacja na kanały (używamy Twoich nazw pwr_l1 itd.)
+#           apply(id(lampa1), b, id(auto_l1).state, id(pwr_l1).state);
+#           apply(id(lampa2), b, id(auto_l2).state, id(pwr_l2).state);
+#           apply(id(lampa3), b, id(auto_l3).state, id(pwr_l3).state);
+#           apply(id(lampa4), b, id(auto_l4).state, id(pwr_l4).state);
+#           apply(id(lampa5), b, id(auto_l5).state, id(pwr_l5).state);
+#           apply(id(lampa6), b, id(auto_l6).state, id(pwr_l6).state);
+#           apply(id(lampa7), b, id(auto_l7).state, id(pwr_l7).state);
 
 #           is_first_run = false;
 
@@ -1495,71 +1398,63 @@ interval:
   - interval: 1min
     then:
       - lambda: |-
-          auto now = id(ds_time).now();
-          if (!now.is_valid()) return;
-          int cur = now.hour * 60 + now.minute;
           static bool is_first_run = true;
+          auto now = id(ds_time).now();
+          int current_min = now.hour * 60 + now.minute;
 
-          // Funkcja obliczająca jasność 0.0 - 1.0
-          auto calc = [&](int su, int eu, int sd, int ed) -> float {
-            if (cur >= eu && cur < sd) return 1.0f; 
-            if (cur >= su && cur < eu) return (float)(cur - su) / (float)(eu - su);
-            if (cur >= sd && cur < ed) return 1.0f - (float)(cur - sd) / (float)(ed - sd);
-            return 0.0f;
+          auto get_progress = [&](int start_h, int start_m, int end_h, int end_m) -> float {
+            int start = start_h * 60 + start_m;
+            int end = end_h * 60 + end_m;
+            if (start == end) return 0.0f;
+            if (current_min < start || current_min >= end) return 0.0f;
+            return (float)(current_min - start) / (float)(end - start);
           };
 
-          // 1. Obliczamy czasy BIAŁYCH (L1, L3, L4, L6)
-          int s_u = id(g_h_start_sunrise) * 60 + id(g_m_start_sunrise);
-          int e_u = id(g_h_end_sunrise) * 60 + id(g_m_end_sunrise);
-          int s_d = id(g_h_start_sunset) * 60 + id(g_m_start_sunset);
-          int e_d = id(g_h_end_sunset) * 60 + id(g_m_end_sunset);
-          float br_white = calc(s_u, e_u, s_d, e_d);
+          float br_morning = get_progress(id(h_start_sunrise).state, id(m_start_sunrise).state, id(h_end_sunrise).state, id(m_end_sunrise).state);
+          float br_evening = 1.0f - get_progress(id(h_start_sunset).state, id(m_start_sunset).state, id(h_end_sunset).state, id(m_end_sunset).state);
+          
+          float b = 0.0f;
+          int start_p = id(h_start_sunrise).state * 60 + id(m_start_sunrise).state;
+          int end_p = id(h_end_sunrise).state * 60 + id(m_end_sunrise).state;
+          int start_w = id(h_start_sunset).state * 60 + id(m_start_sunset).state;
+          int end_w = id(h_end_sunset).state * 60 + id(m_end_sunset).state;
 
-          // 2. Obliczamy czasy GROW (L2, L5)
-          int gr_s_u = s_u - id(g_grow_offset_start); 
-          int gr_e_u = e_u;
-          int gr_s_d = s_d;
-          int gr_e_d = e_d + id(g_grow_offset_end);
-          float br_grow = calc(gr_s_u, gr_e_u, gr_s_d, gr_e_d);
+          if (current_min >= start_p && current_min < end_p) b = br_morning;
+          else if (current_min >= end_p && current_min < start_w) b = 1.0f;
+          else if (current_min >= start_w && current_min < end_w) b = br_evening;
 
-          // 3. Obliczenia dla Tła (L7)
-          int l7_su = id(g_l7_h_start_sunrise) * 60 + id(g_l7_m_start_sunrise);
-          int l7_eu = id(g_l7_h_end_sunrise) * 60 + id(g_l7_m_end_sunrise);
-          int l7_sd = id(g_l7_h_start_sunset) * 60 + id(g_l7_m_start_sunset);
-          int l7_ed = id(g_l7_h_end_sunset) * 60 + id(g_l7_m_end_sunset);
-          float br_l7 = calc(l7_su, l7_eu, l7_sd, l7_ed);
+          // --- LOGIKA ZACHMURZENIA (Tylko dla b == 1.0) ---
+          if (b == 1.0f && id(cloud_simulation_switch).state && esphome::random_float() < 0.05) { 
+            id(cloud_factor) = (id(cloud_factor) < 1.0f) ? 1.0f : 0.65f; // Chmura zabiera ok. 35% mocy
+          }
+          if (b < 1.0f || !id(cloud_simulation_switch).state) id(cloud_factor) = 1.0f; // Reset chmur poza pełnym dniem
 
-          // Funkcja aplikująca z optymalizacją i zabezpieczeniem
-          auto apply = [&](light::LightState* l, float b, bool auto_m, float pwr_val) {
+          // Funkcja apply z parametrem use_clouds
+          auto apply = [&](light::LightState* l, float progress, bool auto_m, float pwr_val, bool use_clouds) {
             if (auto_m) {
-              float target = b * (pwr_val / 100.0f);
+              float multiplier = use_clouds ? id(cloud_factor) : 1.0f;
+              float target = progress * (pwr_val / 100.0f) * multiplier;
               
-              // Zabezpieczenie termiczne
-              if (id(esp_temp).state > 72.0) {
-                target *= 0.8;
-              }
+              if (id(esp_temp).state > 75.0) target *= 0.8f;
 
-              // OPTYMALIZACJA: Wyślij komendę tylko jeśli zmiana jest większa niż 0.1%
-              // lub jeśli to pierwszy start systemu
               float current = l->remote_values.get_brightness();
-              if (abs(current - target) > 0.001f || is_first_run) {
+              if (abs(current - target) > 0.004f || is_first_run) {
                 auto call = l->make_call();
                 call.set_brightness(target);
                 call.set_state(target > 0.001f);
-                // Skróciłem przejście do 59s, aby nie nachodziło na kolejny cykl interval
-                call.set_transition_length(is_first_run ? 5000 : 59000);
+                call.set_transition_length(is_first_run ? 0 : 59000);
                 call.perform();
               }
             }
           };
 
-          // Aplikacja na kanały
-          apply(id(lampa1), br_white, id(auto_l1).state, id(g_pwr_l1));
-          apply(id(lampa2), br_grow,  id(auto_l2).state, id(g_pwr_l2));
-          apply(id(lampa3), br_white, id(auto_l3).state, id(g_pwr_l3));
-          apply(id(lampa4), br_white, id(auto_l4).state, id(g_pwr_l4));
-          apply(id(lampa5), br_grow,  id(auto_l5).state, id(g_pwr_l5));
-          apply(id(lampa6), br_white, id(auto_l6).state, id(g_pwr_l6));
-          apply(id(lampa7), br_l7,    id(auto_l7).state, id(g_pwr_l7));
+          // Aplikacja: Lampy 1-6 z chmurami (true), Tło (Lampa 7) bez chmur (false)
+          apply(id(lampa1), b, id(auto_l1).state, id(pwr_l1).state, true);
+          apply(id(lampa2), b, id(auto_l2).state, id(pwr_l2).state, true);
+          apply(id(lampa3), b, id(auto_l3).state, id(pwr_l3).state, true);
+          apply(id(lampa4), b, id(auto_l4).state, id(pwr_l4).state, true);
+          apply(id(lampa5), b, id(auto_l5).state, id(pwr_l5).state, true);
+          apply(id(lampa6), b, id(auto_l6).state, id(pwr_l6).state, true);
+          apply(id(lampa7), b, id(auto_l7).state, id(pwr_l7).state, false);
 
           is_first_run = false;
