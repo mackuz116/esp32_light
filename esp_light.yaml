@@ -2,11 +2,11 @@ esphome:
   name: esp-light
   project:
     name: "mackuz.esp-light"
-    version: "1.1"
+    version: "1.2"
   on_boot:
     priority: 600
     then:
-      # 1. Wyciszamy piny PWM na starcie
+      # 1. Wyciszamy piny PWM na starcie, aby nie było błyśnięcia
       - light.turn_off: { id: lampa1, transition_length: 0s }
       - light.turn_off: { id: lampa2, transition_length: 0s }
       - light.turn_off: { id: lampa3, transition_length: 0s }
@@ -17,31 +17,24 @@ esphome:
       
       - delay: 5s 
       - lambda: |-
-          // 2. Fix dla modułu RTC DS3231
+          // 2. Fix dla modułu RTC
           id(ds_time).write_byte(0x0E, 0x00);
           id(ds_time).write_byte(0x0F, 0x00);
           id(ds_time).update();
-          ESP_LOGI("BOOT", "RTC zsynchronizowane, lampy czekają na pierwszy cykl interval.");
-
-
+          ESP_LOGI("BOOT", "System gotowy. Startujemy łagodne rozpalanie.");
 
 esp32:
   board: esp32dev
   framework: { type: arduino }
-
 
 preferences:
   flash_write_interval: 1min
 
 logger:
   level: INFO
-  baud_rate: 0 # Wyłącza logowanie po USB, jeśli nie używasz, co odciąża procek
+  baud_rate: 0
   logs:
     text_sensor: ERROR
-
-debug:
-  update_interval: 10s
-
 
 api:
   encryption: { key: !secret api_encryption_key }
@@ -78,207 +71,380 @@ time:
       then: [ds1307.write_time: { id: ds_time }]
 
 output:
-  - platform: ledc
-    pin: 12
-    id: out_lampa1
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - platform: ledc
-    pin: 13
-    id: out_lampa2
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - platform: ledc
-    pin: 14
-    id: out_lampa3
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - platform: ledc
-    pin: 26
-    id: out_lampa4
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - platform: ledc
-    pin: 25
-    id: out_lampa5
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - platform: ledc
-    pin: 33
-    id: out_lampa6
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - platform: ledc
-    pin: 32
-    id: out_lampa7
-    inverted: false
-    # bit_depth: 12
-    frequency: 1000Hz
-  - { platform: ledc, pin: 16, id: out_red, inverted: false }
-  - { platform: ledc, pin: 17, id: out_green, inverted: false }
-  - { platform: ledc, pin: 18, id: out_blue, inverted: false }
-
-
-
-binary_sensor:
-  - platform: status
-    name: "Status Połączenia ESP"
-    id: esp_status
-    icon: "mdi:wifi"
-
-sensor:
-  - platform: uptime
-    name: "Czas pracy ESP"
-    id: esp_uptime
-    icon: "mdi:timer"
-
-  - platform: internal_temperature
-    name: "Temperatura Procesora ESP32"
-    id: esp_temp
-    update_interval: 30s    
-
-  - platform: wifi_signal
-    name: "Sygnał WiFi"
-    id: wifi_sig # Dodaj ID
-    update_interval: 60s
+  - { platform: ledc, pin: 12, id: out_lampa1, frequency: 1000Hz }
+  - { platform: ledc, pin: 13, id: out_lampa2, frequency: 1000Hz }
+  - { platform: ledc, pin: 14, id: out_lampa3, frequency: 1000Hz }
+  - { platform: ledc, pin: 26, id: out_lampa4, frequency: 1000Hz }
+  - { platform: ledc, pin: 25, id: out_lampa5, frequency: 1000Hz }
+  - { platform: ledc, pin: 33, id: out_lampa6, frequency: 1000Hz }
+  - { platform: ledc, pin: 32, id: out_lampa7, frequency: 1000Hz }
+  - { platform: ledc, pin: 16, id: out_red }
+  - { platform: ledc, pin: 17, id: out_green }
+  - { platform: ledc, pin: 18, id: out_blue }
 
 globals:
-  - id: g_pwr_l1
-    type: float
-    restore_value: yes
-    initial_value: '100.0'
-  - id: g_pwr_l2
-    type: float
-    restore_value: yes
-    initial_value: '100.0'
-  - id: g_pwr_l3
-    type: float
-    restore_value: yes
-    initial_value: '100.0'
-  - id: g_pwr_l4
-    type: float
-    restore_value: yes
-    initial_value: '100.0'
-  - id: g_pwr_l5
-    type: float
-    restore_value: yes
-    initial_value: '100.0'
-  - id: g_pwr_l6
-    type: float
-    restore_value: yes
-    initial_value: '100.0'
-  - id: g_pwr_l7
-    type: float
-    restore_value: yes
-    initial_value: '30.0'
+  - { id: g_pwr_l1, type: float, restore_value: yes, initial_value: '100.0' }
+  - { id: g_pwr_l2, type: float, restore_value: yes, initial_value: '100.0' }
+  - { id: g_pwr_l3, type: float, restore_value: yes, initial_value: '100.0' }
+  - { id: g_pwr_l4, type: float, restore_value: yes, initial_value: '100.0' }
+  - { id: g_pwr_l5, type: float, restore_value: yes, initial_value: '100.0' }
+  - { id: g_pwr_l6, type: float, restore_value: yes, initial_value: '100.0' }
+  - { id: g_pwr_l7, type: float, restore_value: yes, initial_value: '30.0' }
+  
+  # Czasy Główne
+  - { id: g_h_start_sunrise, type: int, restore_value: yes, initial_value: '10' }
+  - { id: g_m_start_sunrise, type: int, restore_value: yes, initial_value: '0' }
+  - { id: g_h_end_sunrise, type: int, restore_value: yes, initial_value: '11' }
+  - { id: g_m_end_sunrise, type: int, restore_value: yes, initial_value: '0' }
+  - { id: g_h_start_sunset, type: int, restore_value: yes, initial_value: '18' }
+  - { id: g_m_start_sunset, type: int, restore_value: yes, initial_value: '0' }
+  - { id: g_h_end_sunset, type: int, restore_value: yes, initial_value: '19' }
+  - { id: g_m_end_sunset, type: int, restore_value: yes, initial_value: '0' }
+
+  # Lampa Tło
+  - { id: g_l7_h_start_sunrise, type: int, restore_value: yes, initial_value: '9' }
+  - { id: g_l7_m_start_sunrise, type: int, restore_value: yes, initial_value: '0' }
+  - { id: g_l7_h_end_sunrise, type: int, restore_value: yes, initial_value: '11' }
+  - { id: g_l7_m_end_sunrise, type: int, restore_value: yes, initial_value: '0' }
+  - { id: g_l7_h_start_sunset, type: int, restore_value: yes, initial_value: '18' }
+  - { id: g_l7_m_start_sunset, type: int, restore_value: yes, initial_value: '0' }
+  - { id: g_l7_h_end_sunset, type: int, restore_value: yes, initial_value: '20' }
+  - { id: g_l7_m_end_sunset, type: int, restore_value: yes, initial_value: '0' }
+
+  - { id: g_grow_offset_start, type: int, restore_value: yes, initial_value: '60' }
+  - { id: g_grow_offset_end, type: int, restore_value: yes, initial_value: '60' }
 
 
 
-  # Lampy Główne (L1-L6)
-  - id: g_h_start_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '10'  
-  - id: g_m_start_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: g_h_end_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '11'
-  - id: g_m_end_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: g_h_start_sunset
-    type: int
-    restore_value: yes
-    initial_value: '18'
-  - id: g_m_start_sunset
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: g_h_end_sunset
-    type: int
-    restore_value: yes
-    initial_value: '19'
-  - id: g_m_end_sunset
-    type: int
-    restore_value: yes
-    initial_value: '0'
+number:
+  # --- HARMONOGRAM LAMPY GŁÓWNE (L1, L3, L4, L6) ---
+  - platform: template
+    name: "01 Lampy start poranka (h)"
+    id: h_start_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_h_start_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_h_start_sunrise) = x; id(h_start_sunrise).publish_state(x);"
 
-  # Lampa Tło (L7)
-  - id: g_l7_h_start_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '9'
-  - id: g_l7_m_start_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: g_l7_h_end_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '11'
-  - id: g_l7_m_end_sunrise
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: g_l7_h_start_sunset
-    type: int
-    restore_value: yes
-    initial_value: '18'
-  - id: g_l7_m_start_sunset
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: g_l7_h_end_sunset
-    type: int
-    restore_value: yes
-    initial_value: '20'
-  - id: g_l7_m_end_sunset
-    type: int
-    restore_value: yes
-    initial_value: '0'    
+  - platform: template
+    name: "02 Lampy start poranka (m)"
+    id: m_start_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_m_start_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_m_start_sunrise) = x; id(m_start_sunrise).publish_state(x);"
 
-  - id: g_grow_offset_start
-    type: int
-    restore_value: yes
-    initial_value: '60'  # Domyślnie 60 minut wcześniej
+  - platform: template
+    name: "03 Lampy koniec poranka (h)"
+    id: h_end_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_h_end_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_h_end_sunrise) = x; id(h_end_sunrise).publish_state(x);"
 
-  - id: g_grow_offset_end
-    type: int
-    restore_value: yes
-    initial_value: '60'  # Domyślnie 60 minut później
+  - platform: template
+    name: "04 Lampy koniec poranka (m)"
+    id: m_end_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_m_end_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_m_end_sunrise) = x; id(m_end_sunrise).publish_state(x);"
 
-  - id: cloud_factor
-    type: float
-    restore_value: no
-    initial_value: "1.0"
+  - platform: template
+    name: "05 Lampy start wieczora (h)"
+    id: h_start_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_h_start_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_h_start_sunset) = x; id(h_start_sunset).publish_state(x);"
+
+  - platform: template
+    name: "06 Lampy start wieczora (m)"
+    id: m_start_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_m_start_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_m_start_sunset) = x; id(m_start_sunset).publish_state(x);"
+
+  - platform: template
+    name: "07 Lampy koniec wieczora (h)"
+    id: h_end_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_h_end_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_h_end_sunset) = x; id(h_end_sunset).publish_state(x);"
+
+  - platform: template
+    name: "08 Lampy koniec wieczora (m)"
+    id: m_end_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_m_end_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_m_end_sunset) = x; id(m_end_sunset).publish_state(x);"
+
+  # --- HARMONOGRAM TŁO (L7) ---
+  - platform: template
+    name: "09 Tło start poranka (h)"
+    id: l7_h_start_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_h_start_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_h_start_sunrise) = x; id(l7_h_start_sunrise).publish_state(x);"
+
+  - platform: template
+    name: "10 Tło start poranka (m)"
+    id: l7_m_start_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_m_start_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_m_start_sunrise) = x; id(l7_m_start_sunrise).publish_state(x);"
+
+  - platform: template
+    name: "11 Tło koniec poranka (h)"
+    id: l7_h_end_sunrise
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_h_end_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_h_end_sunrise) = x; id(l7_h_end_sunrise).publish_state(x);"
+
+  - platform: template
+    name: "12 Tło koniec poranka (m)"
+    id: l7_m_end_sunrise
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_m_end_sunrise);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_m_end_sunrise) = x; id(l7_m_end_sunrise).publish_state(x);"
+
+  - platform: template
+    name: "13 Tło start wieczora (h)"
+    id: l7_h_start_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_h_start_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_h_start_sunset) = x; id(l7_h_start_sunset).publish_state(x);"
+
+  - platform: template
+    name: "14 Tło start wieczora (m)"
+    id: l7_m_start_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_m_start_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_m_start_sunset) = x; id(l7_m_start_sunset).publish_state(x);"
+
+  - platform: template
+    name: "15 Tło koniec wieczora (h)"
+    id: l7_h_end_sunset
+    min_value: 0
+    max_value: 23
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_h_end_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_h_end_sunset) = x; id(l7_h_end_sunset).publish_state(x);"
+
+  - platform: template
+    name: "16 Tło koniec wieczora (m)"
+    id: l7_m_end_sunset
+    min_value: 0
+    max_value: 59
+    step: 1
+    mode: box
+    lambda: "return id(g_l7_m_end_sunset);"
+    set_action:
+      then:
+        - lambda: "id(g_l7_m_end_sunset) = x; id(l7_m_end_sunset).publish_state(x);"
+
+  # --- MOCE MAKSYMALNE (pwr_l1 do pwr_l7) ---
+  - platform: template
+    name: "Moc Max Lampa 1 (%)"
+    id: pwr_l1
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l1);"
+    set_action:
+      then:
+        - lambda: |-
+            id(g_pwr_l1) = x;
+            if (!id(auto_l1).state) {
+              auto call = id(lampa1).make_call();
+              call.set_brightness(x / 100.0f);
+              call.perform();
+            } else {
+              id(pwr_l1).publish_state(x);
+            }
+
+  - platform: template
+    name: "Moc Max Lampa 2 (%)"
+    id: pwr_l2
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l2);"
+    set_action:
+      then:
+        - lambda: "id(g_pwr_l2) = x; if (!id(auto_l2).state) { auto call = id(lampa2).make_call(); call.set_brightness(x/100.0f); call.perform(); } else { id(pwr_l2).publish_state(x); }"
+
+  - platform: template
+    name: "Moc Max Lampa 3 (%)"
+    id: pwr_l3
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l3);"
+    set_action:
+      then:
+        - lambda: "id(g_pwr_l3) = x; if (!id(auto_l3).state) { auto call = id(lampa3).make_call(); call.set_brightness(x/100.0f); call.perform(); } else { id(pwr_l3).publish_state(x); }"
+
+  - platform: template
+    name: "Moc Max Lampa 4 (%)"
+    id: pwr_l4
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l4);"
+    set_action:
+      then:
+        - lambda: "id(g_pwr_l4) = x; if (!id(auto_l4).state) { auto call = id(lampa4).make_call(); call.set_brightness(x/100.0f); call.perform(); } else { id(pwr_l4).publish_state(x); }"
+
+  - platform: template
+    name: "Moc Max Lampa 5 (%)"
+    id: pwr_l5
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l5);"
+    set_action:
+      then:
+        - lambda: "id(g_pwr_l5) = x; if (!id(auto_l5).state) { auto call = id(lampa5).make_call(); call.set_brightness(x/100.0f); call.perform(); } else { id(pwr_l5).publish_state(x); }"
+
+  - platform: template
+    name: "Moc Max Lampa 6 (%)"
+    id: pwr_l6
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l6);"
+    set_action:
+      then:
+        - lambda: "id(g_pwr_l6) = x; if (!id(auto_l6).state) { auto call = id(lampa6).make_call(); call.set_brightness(x/100.0f); call.perform(); } else { id(pwr_l6).publish_state(x); }"
+
+  - platform: template
+    name: "Moc Max Lampa 7 (Tło) (%)"
+    id: pwr_l7
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+    lambda: "return id(g_pwr_l7);"
+    set_action:
+      then:
+        - lambda: "id(g_pwr_l7) = x; if (!id(auto_l7).state) { auto call = id(lampa7).make_call(); call.set_brightness(x/100.0f); call.perform(); } else { id(pwr_l7).publish_state(x); }"
+
+  # --- OFFSETS DLA GROW ---
+  - platform: template
+    name: "GROW Start Offset (min)"
+    id: grow_offset_start_ui
+    min_value: 0
+    max_value: 120
+    step: 5
+    unit_of_measurement: "min"
+    lambda: "return (float)id(g_grow_offset_start);"
+    set_action:
+      then:
+        - lambda: "id(g_grow_offset_start) = (int)x; id(grow_offset_start_ui).publish_state(x);"
+
+  - platform: template
+    name: "GROW Koniec Offset (min)"
+    id: grow_offset_end_ui
+    min_value: 0
+    max_value: 120
+    step: 5
+    unit_of_measurement: "min"
+    lambda: "return (float)id(g_grow_offset_end);"
+    set_action:
+      then:
+        - lambda: "id(g_grow_offset_end) = (int)x; id(grow_offset_end_ui).publish_state(x);"
+
+
 
 light:
   - platform: monochromatic
     name: "Lampa 1"
-    output: out_lampa1 # lub out_lampa1 zależnie od Twoich ID
+    output: out_lampa1
     id: lampa1
     on_state:
       then:
         - lambda: |-
-            // Box śledzi pasek TYLKO w trybie ręcznym (Auto OFF)
             if (!id(auto_l1).state) {
               float v = id(lampa1).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l1).state - v) > 0.5) {
-                id(pwr_l1).publish_state(v); 
-              }
+              if (abs(id(pwr_l1).state - v) > 0.5) id(pwr_l1).publish_state(v);
             }
-
+  # ... (Powiel dla lamp 2-7 analogicznie jak w Twoim pliku) ...
+  # Lampa 2, 3, 4, 5, 6, 7...
   - platform: monochromatic
     name: "Lampa 2"
     output: out_lampa2
@@ -288,11 +454,8 @@ light:
         - lambda: |-
             if (!id(auto_l2).state) {
               float v = id(lampa2).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l2).state - v) > 0.5) {
-                id(pwr_l2).publish_state(v);
-              }
+              if (abs(id(pwr_l2).state - v) > 0.5) id(pwr_l2).publish_state(v);
             }
-
   - platform: monochromatic
     name: "Lampa 3"
     output: out_lampa3
@@ -302,11 +465,8 @@ light:
         - lambda: |-
             if (!id(auto_l3).state) {
               float v = id(lampa3).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l3).state - v) > 0.5) {
-                id(pwr_l3).publish_state(v);
-              }
+              if (abs(id(pwr_l3).state - v) > 0.5) id(pwr_l3).publish_state(v);
             }
-
   - platform: monochromatic
     name: "Lampa 4"
     output: out_lampa4
@@ -316,11 +476,8 @@ light:
         - lambda: |-
             if (!id(auto_l4).state) {
               float v = id(lampa4).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l4).state - v) > 0.5) {
-                id(pwr_l4).publish_state(v);
-              }
+              if (abs(id(pwr_l4).state - v) > 0.5) id(pwr_l4).publish_state(v);
             }
-
   - platform: monochromatic
     name: "Lampa 5"
     output: out_lampa5
@@ -330,11 +487,8 @@ light:
         - lambda: |-
             if (!id(auto_l5).state) {
               float v = id(lampa5).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l5).state - v) > 0.5) {
-                id(pwr_l5).publish_state(v);
-              }
+              if (abs(id(pwr_l5).state - v) > 0.5) id(pwr_l5).publish_state(v);
             }
-
   - platform: monochromatic
     name: "Lampa 6"
     output: out_lampa6
@@ -344,13 +498,10 @@ light:
         - lambda: |-
             if (!id(auto_l6).state) {
               float v = id(lampa6).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l6).state - v) > 0.5) {
-                id(pwr_l6).publish_state(v);
-              }
+              if (abs(id(pwr_l6).state - v) > 0.5) id(pwr_l6).publish_state(v);
             }
-
   - platform: monochromatic
-    name: "Lampa 7 (Tło)"
+    name: "Lampa 7"
     output: out_lampa7
     id: lampa7
     on_state:
@@ -358,12 +509,8 @@ light:
         - lambda: |-
             if (!id(auto_l7).state) {
               float v = id(lampa7).remote_values.get_brightness() * 100.0;
-              if (abs(id(pwr_l7).state - v) > 0.5) {
-                id(pwr_l7).publish_state(v);
-              }
+              if (abs(id(pwr_l7).state - v) > 0.5) id(pwr_l7).publish_state(v);
             }
-
-
 
   - platform: rgb
     name: "Oświetlenie RGB"
@@ -371,188 +518,88 @@ light:
     green: out_green
     blue: out_blue
     id: light_rgb
-    restore_mode: RESTORE_DEFAULT_OFF
+
+sensor:
+  - platform: uptime
+    name: "Czas pracy ESP"
+  - platform: internal_temperature
+    name: "Temperatura Procesora ESP32"
+    id: esp_temp
+  - platform: wifi_signal
+    name: "Sygnał WiFi"
 
 
 
-display:
-  - platform: ssd1306_i2c
-    model: "SSD1306 128x64"
-    address: 0x3C
-    update_interval: 1s # Odciążamy procesor
+  - platform: template
+    name: "L1 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
     lambda: |-
-      // --- NAGŁÓWEK (Zawsze widoczny) ---
-      it.strftime(0, 0, id(font_small), "%Y-%m-%d  %H:%M:%S", id(ds_time).now());
-      it.line(0, 13, 127, 13); 
-      //it.draw_line(0, 12, 127, 12); // Używamy draw_line zamiast line (często szybciej)
-
-
-      bool show_main = (id(ds_time).now().second % 10 < 5);
-      // Logika przełączania widoków (5 sekund na widok)
-      if (show_main) {
-        // --- EKRAN 1: LAMPY GŁÓWNE (L1-L6) ---
-        //it.print(0, 16, id(font_small), "GŁÓWNE (L1-L6)");
-        
-        it.printf(0, 16, id(font_small), "Wsch: %02.0f:%02.0f-%02.0f:%02.0f", 
-                  id(h_start_sunrise).state, id(m_start_sunrise).state,
-                  id(h_end_sunrise).state, id(m_end_sunrise).state);
-
-        it.printf(0, 31, id(font_small), "Zach: %02.0f:%02.0f-%02.0f:%02.0f", 
-                  id(h_start_sunset).state, id(m_start_sunset).state,
-                  id(h_end_sunset).state, id(m_end_sunset).state);
-
-        it.printf(0, 44, id(font_small), "Lampy: %.0f%%  Tr:%s", 
-                  id(lampa1).remote_values.get_brightness() * 100.0,
-                  id(auto_l1).state ? "AUTO" : "MAN");
-
-      } else {
-        // --- EKRAN 2: PANEL TŁO (L7) ---
-        //it.print(0, 16, id(font_small), "TŁO (Panel L7)");
-
-        it.printf(0, 16, id(font_small), "Wsch: %02.0f:%02.0f-%02.0f:%02.0f", 
-                  id(l7_h_start_sunrise).state, id(l7_m_start_sunrise).state,
-                  id(l7_h_end_sunrise).state, id(l7_m_end_sunrise).state);
-
-        it.printf(0, 31, id(font_small), "Zach: %02.0f:%02.0f-%02.0f:%02.0f", 
-                  id(l7_h_start_sunset).state, id(l7_m_start_sunset).state,
-                  id(l7_h_end_sunset).state, id(l7_m_end_sunset).state);
-
-        it.printf(0, 44, id(font_small), "Tło: %.0f%%  Tryb:%s", 
-                  id(lampa7).remote_values.get_brightness() * 100.0,
-                  id(auto_l7).state ? "AUTO" : "MAN");
+      if (id(lampa1).remote_values.is_on()) {
+        return id(lampa1).remote_values.get_brightness() * 100.0f;
       }
-
-
-
-
-
-font:
-  - file: "gfonts://Roboto"
-    id: font_small
-    size: 12
-    # antialias: false
-    glyphs: 
-      # Poniżej w cudzysłowie jest spacja oraz wszystkie standardowe znaki i polskie litery
-      - " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,-_:;()!%/ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-
-
-
-text_sensor:
+      return 0.0f;
+    update_interval: 10s  
   - platform: template
-    name: "Czas z Internetu (NTP)"
-    id: ntp_time_www
-    icon: "mdi:clock-outline"
-    update_interval: 10s
+    name: "L2 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
     lambda: |-
-      return id(sntp_time).now().strftime("%Y-%m-%d %H:%M:%S");
-
+      if (id(lampa2).remote_values.is_on()) {
+        return id(lampa2).remote_values.get_brightness() * 100.0f;
+      }
+      return 0.0f;
+    update_interval: 10s  
   - platform: template
-    name: "Czas z Modułu (RTC)"
-    id: rtc_time_www
-    icon: "mdi:chip"
-    update_interval: 10s
+    name: "L3 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
     lambda: |-
-      return id(ds_time).now().strftime("%Y-%m-%d %H:%M:%S");
-
-  # --- SYNC LAMPY GŁÓWNE ---
-  - platform: homeassistant
-    id: sync_start_sunrise
-    entity_id: input_datetime.akwarium_start_poranka
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_h_start_sunrise) = h; id(g_m_start_sunrise) = m;
-              id(h_start_sunrise).publish_state(h); id(m_start_sunrise).publish_state(m);
-            }
-
-  - platform: homeassistant
-    id: sync_end_sunrise
-    entity_id: input_datetime.akwarium_koniec_poranka
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_h_end_sunrise) = h; id(g_m_end_sunrise) = m;
-              id(h_end_sunrise).publish_state(h); id(m_end_sunrise).publish_state(m);
-            }
-
-  - platform: homeassistant
-    id: sync_start_sunset
-    entity_id: input_datetime.akwarium_start_zachodu
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_h_start_sunset) = h; id(g_m_start_sunset) = m;
-              id(h_start_sunset).publish_state(h); id(m_start_sunset).publish_state(m);
-            }
-
-  - platform: homeassistant
-    id: sync_end_sunset
-    entity_id: input_datetime.akwarium_koniec_zachodu
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_h_end_sunset) = h; id(g_m_end_sunset) = m;
-              id(h_end_sunset).publish_state(h); id(m_end_sunset).publish_state(m);
-            }
-
-  # --- SYNC LAMPA TŁO (L7) ---
-  - platform: homeassistant
-    id: sync_l7_start_sunrise
-    entity_id: input_datetime.tlo_start_poranka
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_l7_h_start_sunrise) = h; id(g_l7_m_start_sunrise) = m;
-              id(l7_h_start_sunrise).publish_state(h); id(l7_m_start_sunrise).publish_state(m);
-            }
-
-  - platform: homeassistant
-    id: sync_l7_end_sunrise
-    entity_id: input_datetime.tlo_koniec_poranka
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_l7_h_end_sunrise) = h; id(g_l7_m_end_sunrise) = m;
-              id(l7_h_end_sunrise).publish_state(h); id(l7_m_end_sunrise).publish_state(m);
-            }
-
-  - platform: homeassistant
-    id: sync_l7_start_sunset
-    entity_id: input_datetime.tlo_start_zachodu
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_l7_h_start_sunset) = h; id(g_l7_m_start_sunset) = m;
-              id(l7_h_start_sunset).publish_state(h); id(l7_m_start_sunset).publish_state(m);
-            }
-
-  - platform: homeassistant
-    id: sync_l7_end_sunset
-    entity_id: input_datetime.tlo_koniec_zachodu
-    on_value:
-      then:
-        - lambda: |-
-            int h, m;
-            if (sscanf(x.c_str(), "%d:%d", &h, &m) >= 2) {
-              id(g_l7_h_end_sunset) = h; id(g_l7_m_end_sunset) = m;
-              id(l7_h_end_sunset).publish_state(h); id(l7_m_end_sunset).publish_state(m);
-            }
-
-
+      if (id(lampa3).remote_values.is_on()) {
+        return id(lampa3).remote_values.get_brightness() * 100.0f;
+      }
+      return 0.0f;
+    update_interval: 10s  
+  - platform: template
+    name: "L4 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    lambda: |-
+      if (id(lampa4).remote_values.is_on()) {
+        return id(lampa4).remote_values.get_brightness() * 100.0f;
+      }
+      return 0.0f;
+    update_interval: 10s  
+  - platform: template
+    name: "L5 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    lambda: |-
+      if (id(lampa5).remote_values.is_on()) {
+        return id(lampa5).remote_values.get_brightness() * 100.0f;
+      }
+      return 0.0f;
+    update_interval: 10s  
+  - platform: template
+    name: "L6 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    lambda: |-
+      if (id(lampa6).remote_values.is_on()) {
+        return id(lampa6).remote_values.get_brightness() * 100.0f;
+      }
+      return 0.0f;
+    update_interval: 10s  
+  - platform: template
+    name: "L7 Natężenie Rzeczywiste"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    lambda: |-
+      if (id(lampa7).remote_values.is_on()) {
+        return id(lampa7).remote_values.get_brightness() * 100.0f;
+      }
+      return 0.0f;
+    update_interval: 10s  
 
 
 
@@ -563,898 +610,155 @@ switch:
     id: auto_l1
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
+  # ... (Powiel dla lamp 2-7) ...
   - platform: template
     name: "Lampa 2 - Auto"
     id: auto_l2
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
   - platform: template
     name: "Lampa 3 - Auto"
     id: auto_l3
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
   - platform: template
     name: "Lampa 4 - Auto"
     id: auto_l4
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
   - platform: template
     name: "Lampa 5 - Auto"
     id: auto_l5
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
   - platform: template
     name: "Lampa 6 - Auto"
     id: auto_l6
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
   - platform: template
-    name: "Lampa 7 (Tło) - Auto"
+    name: "Lampa 7 - Auto"
     id: auto_l7
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    icon: "mdi:robot"
+
   - platform: template
     name: "Symulacja Chmur"
-    id: cloud_simulation_switch
+    id: chmury_on_off
     optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    entity_category: config
     icon: "mdi:cloud-sync"
-
-
-number:
-  # --- GRUPA GŁÓWNA (L1 - L6) ---
-  - platform: template
-    name: "01 Lampy start poranka (h)"
-    id: h_start_sunrise
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 10
-    lambda: "return id(g_h_start_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_h_start_sunrise) = x; // Zapisz do pamięci
-            id(h_start_sunrise).publish_state(x); // Odśwież widok w HA
-
-  - platform: template
-    name: "02 Lampy start poranka (m)"
-    id: m_start_sunrise
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 30
-    lambda: "return id(g_m_start_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_m_start_sunrise) = x; // Zapisz do pamięci
-            id(m_start_sunrise).publish_state(x); // Odśwież widok w HA
-
-
-
-  - platform: template
-    name: "03 Lampy koniec poranka (h)"
-    id: h_end_sunrise
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 11
-    lambda: "return id(g_h_end_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_h_end_sunrise) = x; // Zapisz do pamięci
-            id(h_end_sunrise).publish_state(x); // Odśwież widok w HA
-
-  
-  - platform: template
-    name: "04 Lampy koniec poranka (m)"
-    id: m_end_sunrise
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 0
-    lambda: "return id(g_m_end_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_m_end_sunrise) = x; // Zapisz do pamięci
-            id(m_end_sunrise).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "05 Lampy start wieczora (h)"
-    id: h_start_sunset
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # restore_value: yes
-    # initial_value: 19
-    lambda: "return id(g_h_start_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_h_start_sunset) = x; // Zapisz do pamięci
-            id(h_start_sunset).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "06 Lampy start wieczora (m)"
-    id: m_start_sunset
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 0
-    lambda: "return id(g_m_start_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_m_start_sunset) = x; // Zapisz do pamięci
-            id(m_start_sunset).publish_state(x); // Odśwież widok w HA
-
-
-
-  - platform: template
-    name: "07 Lampy koniec wieczora (h)"
-    id: h_end_sunset
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 19
-    lambda: "return id(g_h_end_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_h_end_sunset) = x; // Zapisz do pamięci
-            id(h_end_sunset).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "08 Lampy koniec wieczora (m)"
-    id: m_end_sunset
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 0
-    lambda: "return id(g_m_end_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_m_end_sunset) = x; // Zapisz do pamięci
-            id(m_end_sunset).publish_state(x); // Odśwież widok w HA
-
-
-  # --- TŁO (L7) ---
-  - platform: template
-    name: "09 Tło start poranka (h)"
-    id: l7_h_start_sunrise
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 8
-    lambda: "return id(g_l7_h_start_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_h_start_sunrise) = x; // Zapisz do pamięci
-            id(l7_h_start_sunrise).publish_state(x); // Odśwież widok w HA
-
-  
-  - platform: template
-    name: "10 Tło start poranka (m)"
-    id: l7_m_start_sunrise
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 0
-    lambda: "return id(g_l7_m_start_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_m_start_sunrise) = x; // Zapisz do pamięci
-            id(l7_m_start_sunrise).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "11 Tło koniec poranka (h)"
-    id: l7_h_end_sunrise
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 9
-    lambda: "return id(g_l7_h_end_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_h_end_sunrise) = x; // Zapisz do pamięci
-            id(l7_h_end_sunrise).publish_state(x); // Odśwież widok w HA
-
-
-  
-  - platform: template
-    name: "12 Tło koniec poranka (m)"
-    id: l7_m_end_sunrise
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 0
-    lambda: "return id(g_l7_m_end_sunrise);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_m_end_sunrise) = x; // Zapisz do pamięci
-            id(l7_m_end_sunrise).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "13 Tło start wieczora (h)"
-    id: l7_h_start_sunset
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 20
-    lambda: "return id(g_l7_h_start_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_h_start_sunset) = x; // Zapisz do pamięci
-            id(l7_h_start_sunset).publish_state(x); // Odśwież widok w HA
-
-
-
-  - platform: template
-    name: "14 Tło start wieczora (m)"
-    id: l7_m_start_sunset
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 0
-    lambda: "return id(g_l7_m_start_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_m_start_sunset) = x; // Zapisz do pamięci
-            id(l7_m_start_sunset).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "15 Tło koniec wieczora (h)"
-    id: l7_h_end_sunset
-    min_value: 0
-    max_value: 23
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 22
-    lambda: "return id(g_l7_h_end_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_h_end_sunset) = x; // Zapisz do pamięci
-            id(l7_h_end_sunset).publish_state(x); // Odśwież widok w HA
-
-
-  - platform: template
-    name: "16 Tło koniec wieczora (m)"
-    id: l7_m_end_sunset
-    min_value: 0
-    max_value: 59
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    # initial_value: 30
-    lambda: "return id(g_l7_m_end_sunset);"
-    
-    # 2. ZAPIS (nie może być return)
-    set_action:
-      then:
-        - lambda: |-
-            id(g_l7_m_end_sunset) = x; // Zapisz do pamięci
-            id(l7_m_end_sunset).publish_state(x); // Odśwież widok w HA
-
-
-
-  # --- MOCE INDYWIDUALNE DLA KAŻDEJ LAMPY (Boxy) ---
-  - platform: template
-    name: "Moc Max Lampa 1 (%)"
-    id: pwr_l1
-    min_value: 0
-    max_value: 100
-    step: 1
-    mode: box
-    # optimistic: true
-    lambda: "return id(g_pwr_l1);"
-    # restore_value: yes
-    # initial_value: 80
-    # on_value:
-    #   then:
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa1).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa1).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l1) = x;
-
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa1).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa1).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l1) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l1).state) {
-              auto call = id(lampa1).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l1).publish_state(x);
-            }  
-  
-  - platform: template
-    name: "Moc Max Lampa 2 (%)"
-    id: pwr_l2
-    min_value: 0
-    max_value: 100
-    step: 1
-    mode: box
-    # optimistic: true
-    lambda: "return id(g_pwr_l2);"
-    # restore_value: yes
-    # initial_value: 80
-    # on_value:
-    #   then:
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa2).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa2).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l2) = x;
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa2).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa2).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l2) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l2).state) {
-              auto call = id(lampa2).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l2).publish_state(x);
-            }  
-  
-
-
-  - platform: template
-    name: "Moc Max Lampa 3 (%)"
-    id: pwr_l3
-    min_value: 0
-    max_value: 100
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    lambda: "return id(g_pwr_l3);"
-    # initial_value: 80
-    # on_value:
-    #   then:
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa3).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa3).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l3) = x;
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa3).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa3).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l3) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l3).state) {
-              auto call = id(lampa3).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l3).publish_state(x);
-            }  
-  
-
-
-
-
-  - platform: template
-    name: "Moc Max Lampa 4 (%)"
-    id: pwr_l4
-    min_value: 0
-    max_value: 100
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    lambda: "return id(g_pwr_l4);"
-    # initial_value: 80
-    # on_value:
-    #   then:
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa4).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa4).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l4) = x;
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa4).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa4).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l4) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l4).state) {
-              auto call = id(lampa4).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l4).publish_state(x);
-            }  
-  
-
-
-
-  - platform: template
-    name: "Moc Max Lampa 5 (%)"
-    id: pwr_l5
-    min_value: 0
-    max_value: 100
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    lambda: "return id(g_pwr_l5);"
-    # initial_value: 80
-    # on_value:
-    #   then:
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa5).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa5).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l5) = x;
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa5).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa5).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l5) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l5).state) {
-              auto call = id(lampa5).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l5).publish_state(x);
-            }    
-    
-
-  - platform: template
-    name: "Moc Max Lampa 6 (%)"
-    id: pwr_l6
-    min_value: 0
-    max_value: 100
-    step: 1
-    mode: box
-    # optimistic: truesunri
-    # restore_value: yes
-    lambda: "return id(g_pwr_l6);"
-    # initial_value: 80
-    # on_value:
-    #   then:
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa6).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa6).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l6) = x;
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa6).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa6).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l6) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l6).state) {
-              auto call = id(lampa6).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l6).publish_state(x);
-            }    
-
-
-
-  - platform: template
-    name: "Moc Max Lampa 7 (Tło) (%)"
-    id: pwr_l7
-    min_value: 0
-    max_value: 100
-
-    step: 1
-    mode: box
-    # optimistic: true
-    # restore_value: yes
-    lambda: "return id(g_pwr_l7);"
-    # initial_value: 80
-    # on_value:
-    #   then:    
-    #     - lambda: |-
-    #         float nb = x / 100.0;
-    #         if (abs(id(lampa7).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa7).make_call();
-    #           call.set_brightness(nb);
-    #           call.perform();
-    #         }
-    # set_action:
-    #   then:
-    #     - lambda: |-
-    #         // 1. Zapisz do pamięci Flash (globals)
-    #         id(g_pwr_l7) = x;
-    #         float nb = x / 100.0;
-    #         // Sprawdzamy tylko, czy nowa wartość różni się od obecnej na pasku
-    #         if (abs(id(lampa7).remote_values.get_brightness() - nb) > 0.005) {
-    #           auto call = id(lampa7).make_call();
-    #           call.set_brightness(nb);
-    #           // Opcjonalnie: jeśli chcesz, żeby box zmieniał jasność TYLKO gdy lampa świeci, 
-    #           // zostawiamy call.perform(), ale usuwamy blokadę trybu AUTO.
-    #           call.perform();
-    #         }  
-  
-    set_action:
-      then:
-        - lambda: |-
-            id(g_pwr_l7) = x; // Zapisz nową moc max do pamięci
-            // Steruj lampą z boxa tylko jeśli AUTO jest wyłączone
-            if (!id(auto_l7).state) {
-              auto call = id(lampa7).make_call();
-              call.set_brightness(x / 100.0f);
-              call.perform();
-            } else {
-              // Jeśli AUTO jest włączone, po prostu zaktualizuj box w UI
-              id(pwr_l7).publish_state(x);
-            }    
-
-
-
-
-
-  - platform: template
-    name: "GROW Start Offset (min)"
-    id: grow_offset_start_ui
-    min_value: 0
-    max_value: 120
-    step: 5
-    unit_of_measurement: "min"
-    restore_value: true
-    initial_value: 60
-    optimistic: true
-    on_value:
-      then:
-        - lambda: 'id(g_grow_offset_start) = (int)x;'
-
-  - platform: template
-    name: "GROW Koniec Offset (min)"
-    id: grow_offset_end_ui
-    min_value: 0
-    max_value: 120
-    step: 5
-    unit_of_measurement: "min"
-    restore_value: true
-    initial_value: 60
-    optimistic: true
-    on_value:
-      then:
-        - lambda: 'id(g_grow_offset_end) = (int)x;'
-
-
-
-# interval:
-#   - interval: 1min
-#     then:
-#       - lambda: |-
-#           static bool is_first_run = true;
-          
-#           // Pobranie czasu
-#           auto now = id(ds_time).now();
-#           int current_min = now.hour * 60 + now.minute;
-
-#           // Funkcja pomocnicza do obliczania progresu
-#           auto get_progress = [&](int start_h, int start_m, int end_h, int end_m) -> float {
-#             int start = start_h * 60 + start_m;
-#             int end = end_h * 60 + end_m;
-#             if (start == end) return 0.0f;
-#             if (current_min < start || current_min >= end) return 0.0f;
-#             return (float)(current_min - start) / (float)(end - start);
-#           };
-
-#           // --- DOPASOWANE NAZWY ID ---
-#           // Poranek (Sunrise)
-#           float br_morning = get_progress(id(h_start_sunrise).state, id(m_start_sunrise).state, id(h_end_sunrise).state, id(m_end_sunrise).state);
-          
-#           // Wieczór (Sunset)
-#           float br_evening = 1.0f - get_progress(id(h_start_sunset).state, id(m_start_sunset).state, id(h_end_sunset).state, id(m_end_sunset).state);
-          
-#           // Wybór aktualnego poziomu (b)
-#           float b = 0.0f;
-#           int start_p = id(h_start_sunrise).state * 60 + id(m_start_sunrise).state;
-#           int end_p = id(h_end_sunrise).state * 60 + id(m_end_sunrise).state;
-#           int start_w = id(h_start_sunset).state * 60 + id(m_start_sunset).state;
-#           int end_w = id(h_end_sunset).state * 60 + id(m_end_sunset).state;
-
-#           if (current_min >= start_p && current_min < end_p) {
-#               b = br_morning; 
-#           } else if (current_min >= end_p && current_min < start_w) {
-#               b = 1.0f;       
-#           } else if (current_min >= start_w && current_min < end_w) {
-#               b = br_evening; 
-#           }
-
-#           auto apply = [&](light::LightState* l, float progress, bool auto_m, float pwr_val) {
-#             if (auto_m) {
-#               float target = progress * (pwr_val / 100.0f);
-              
-#               if (id(esp_temp).state > 75.0) {
-#                 target *= 0.8f;
-#               }
-
-#               float current = l->remote_values.get_brightness();
-              
-#               if (abs(current - target) > 0.004f || is_first_run) {
-#                 auto call = l->make_call();
-#                 call.set_brightness(target);
-#                 call.set_state(target > 0.001f);
-#                 call.set_transition_length(is_first_run ? 0 : 59000);
-#                 call.perform();
-#               }
-#             }
-#           };
-
-#           // Aplikacja na kanały (używamy Twoich nazw pwr_l1 itd.)
-#           apply(id(lampa1), b, id(auto_l1).state, id(pwr_l1).state);
-#           apply(id(lampa2), b, id(auto_l2).state, id(pwr_l2).state);
-#           apply(id(lampa3), b, id(auto_l3).state, id(pwr_l3).state);
-#           apply(id(lampa4), b, id(auto_l4).state, id(pwr_l4).state);
-#           apply(id(lampa5), b, id(auto_l5).state, id(pwr_l5).state);
-#           apply(id(lampa6), b, id(auto_l6).state, id(pwr_l6).state);
-#           apply(id(lampa7), b, id(auto_l7).state, id(pwr_l7).state);
-
-#           is_first_run = false;
 
 
 interval:
   - interval: 1min
     then:
       - lambda: |-
-          static bool is_first_run = true;
           auto now = id(ds_time).now();
-          int current_min = now.hour * 60 + now.minute;
+          if (!now.is_valid()) return;
+          int cur = now.hour * 60 + now.minute;
+          static bool is_first_run = true;
 
-          auto get_progress = [&](int start_h, int start_m, int end_h, int end_m) -> float {
-            int start = start_h * 60 + start_m;
-            int end = end_h * 60 + end_m;
-            if (start == end) return 0.0f;
-            if (current_min < start || current_min >= end) return 0.0f;
-            return (float)(current_min - start) / (float)(end - start);
+          // 1. LOGIKA CHMUR
+          //float cloud_factor = 1.0f; 
+          //if (id(chmury_on_off).state) {
+          //  srand(cur); 
+          //  if ((rand() % 100) < 15) { 
+          //    cloud_factor = 0.60f;
+          //  }
+          //}
+
+          // 1. LOGIKA CHMUR
+          float cloud_factor = 1.0f; 
+          if (id(chmury_on_off).state) {
+            // Używamy micros() dla lepszej losowości niż cur
+            srand(micros()); 
+            int chance = rand() % 100;
+            if (chance < 20) { // Zwiększyłem do 20% dla testu
+              cloud_factor = 0.60f;
+              // Ten log pojawi się od razu po wylosowaniu
+              ESP_LOGW("akwarium", "LOSOWANIE: Chmura! (wylosowano: %d)", chance);
+            } else {
+              // Ten log potwierdzi Ci co minutę, że chmury są ON, ale akurat nie wylosowano
+              ESP_LOGD("akwarium", "LOSOWANIE: Słońce (wylosowano: %d)", chance);
+            }
+          }
+
+
+          // 2. FUNKCJA OBLICZAJĄCA POSTĘP (Ze strażnikiem)
+          auto calc = [&](int su, int eu, int sd, int ed) -> float {
+            if (cur < su) return 0.0f; 
+            if (cur >= eu && cur < sd) return 1.0f; 
+            if (cur >= su && cur < eu) return (float)(cur - su) / (float)(eu - su);
+            if (cur >= sd && cur < ed) return 1.0f - (float)(cur - sd) / (float)(ed - sd);
+            return 0.0f;
           };
 
-          float br_morning = get_progress(id(h_start_sunrise).state, id(m_start_sunrise).state, id(h_end_sunrise).state, id(m_end_sunrise).state);
-          float br_evening = 1.0f - get_progress(id(h_start_sunset).state, id(m_start_sunset).state, id(h_end_sunset).state, id(m_end_sunset).state);
+          // 3. OBLICZENIA CZASÓW - USUNIĘTO .state
+          int s_u = id(g_h_start_sunrise) * 60 + id(g_m_start_sunrise);
+          int e_u = id(g_h_end_sunrise) * 60 + id(g_m_end_sunrise);
+          int s_d = id(g_h_start_sunset) * 60 + id(g_m_start_sunset);
+          int e_d = id(g_h_end_sunset) * 60 + id(g_m_end_sunset);
+
+          float br_white = calc(s_u, e_u, s_d, e_d);
           
-          float b = 0.0f;
-          int start_p = id(h_start_sunrise).state * 60 + id(m_start_sunrise).state;
-          int end_p = id(h_end_sunrise).state * 60 + id(m_end_sunrise).state;
-          int start_w = id(h_start_sunset).state * 60 + id(m_start_sunset).state;
-          int end_w = id(h_end_sunset).state * 60 + id(m_end_sunset).state;
+          // 4. GROW (L2, L5) - Wspólny koniec świtu i początek zachodu
+          float br_grow = calc(s_u - id(g_grow_offset_start), 
+                               e_u, 
+                               s_d, 
+                               e_d + id(g_grow_offset_end));
 
-          if (current_min >= start_p && current_min < end_p) b = br_morning;
-          else if (current_min >= end_p && current_min < start_w) b = 1.0f;
-          else if (current_min >= start_w && current_min < end_w) b = br_evening;
+          // 5. TŁO (L7) - Własne godziny
+          int l7_su = id(g_l7_h_start_sunrise) * 60 + id(g_l7_m_start_sunrise);
+          int l7_eu = id(g_l7_h_end_sunrise) * 60 + id(g_l7_m_end_sunrise);
+          int l7_sd = id(g_l7_h_start_sunset) * 60 + id(g_l7_m_start_sunset);
+          int l7_ed = id(g_l7_h_end_sunset) * 60 + id(g_l7_m_end_sunset);
 
-          // --- LOGIKA ZACHMURZENIA (Tylko dla b == 1.0) ---
-          if (b == 1.0f && id(cloud_simulation_switch).state && esphome::random_float() < 0.05) { 
-            id(cloud_factor) = (id(cloud_factor) < 1.0f) ? 1.0f : 0.65f; // Chmura zabiera ok. 35% mocy
-          }
-          if (b < 1.0f || !id(cloud_simulation_switch).state) id(cloud_factor) = 1.0f; // Reset chmur poza pełnym dniem
+          float br_l7 = calc(l7_su, l7_eu, l7_sd, l7_ed);
 
-          // Funkcja apply z parametrem use_clouds
-          auto apply = [&](light::LightState* l, float progress, bool auto_m, float pwr_val, bool use_clouds) {
+          // 6. FUNKCJA APLIKUJĄCA
+          auto apply = [&](light::LightState* l, float b, bool auto_m, float pwr_val, bool allow_clouds) {
             if (auto_m) {
-              float multiplier = use_clouds ? id(cloud_factor) : 1.0f;
-              float target = progress * (pwr_val / 100.0f) * multiplier;
+              float multiplier = allow_clouds ? cloud_factor : 1.0f;
+              float target = b * (pwr_val / 100.0f) * multiplier;
+
+              // Sprawdzamy temperaturę
+              bool temp_limit = false;
+              if (id(esp_temp).state > 75.0) {
+                target *= 0.8;
+                temp_limit = true;
+              }              
               
-              if (id(esp_temp).state > 75.0) target *= 0.8f;
+              // if (id(esp_temp).state > 72.0) target *= 0.8;
 
               float current = l->remote_values.get_brightness();
-              if (abs(current - target) > 0.004f || is_first_run) {
+              if (abs(current - target) > 0.001f || is_first_run) {
                 auto call = l->make_call();
                 call.set_brightness(target);
-                call.set_state(target > 0.001f);
-                call.set_transition_length(is_first_run ? 0 : 59000);
+                call.set_state(target > 0.0001f);
+                call.set_transition_length(is_first_run ? 120000 : 59000);
                 call.perform();
+              }
+
+              if (l == id(lampa1)) {
+                if (temp_limit) {
+                  ESP_LOGW("akwarium", "ALARM TEMP! Obniżono moc do 80%% z powodu temperatury: %.1f°C", id(esp_temp).state);
+                }
+                if (multiplier < 1.0f) {
+                  ESP_LOGW("akwarium", "CHMURA: Redukcja do %.0f%%", multiplier * 100.0f);
+                }
               }
             }
           };
 
-          // Aplikacja: Lampy 1-6 z chmurami (true), Tło (Lampa 7) bez chmur (false)
-          apply(id(lampa1), b, id(auto_l1).state, id(pwr_l1).state, true);
-          apply(id(lampa2), b, id(auto_l2).state, id(pwr_l2).state, true);
-          apply(id(lampa3), b, id(auto_l3).state, id(pwr_l3).state, true);
-          apply(id(lampa4), b, id(auto_l4).state, id(pwr_l4).state, true);
-          apply(id(lampa5), b, id(auto_l5).state, id(pwr_l5).state, true);
-          apply(id(lampa6), b, id(auto_l6).state, id(pwr_l6).state, true);
-          apply(id(lampa7), b, id(auto_l7).state, id(pwr_l7).state, false);
+          // 7. REALIZACJA - USUNIĘTO .state przy g_pwr
+          apply(id(lampa1), br_white, id(auto_l1).state, id(g_pwr_l1), true);
+          apply(id(lampa2), br_grow,  id(auto_l2).state, id(g_pwr_l2), true);
+          apply(id(lampa3), br_white, id(auto_l3).state, id(g_pwr_l3), true);
+          apply(id(lampa4), br_white, id(auto_l4).state, id(g_pwr_l4), true);
+          apply(id(lampa5), br_grow,  id(auto_l5).state, id(g_pwr_l5), true);
+          apply(id(lampa6), br_white, id(auto_l6).state, id(g_pwr_l6), true);
+          apply(id(lampa7), br_l7,    id(auto_l7).state, id(g_pwr_l7), false);
+
+          ESP_LOGI("akwarium", "Postep Bialych: %.2f, Postep Tla: %.2f, Grow: %.2f", br_white, br_l7, br_grow);
 
           is_first_run = false;
