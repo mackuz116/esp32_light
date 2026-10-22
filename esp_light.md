@@ -57,3 +57,6 @@ SPECYFIKACJA PINU GPIO 12 (Lampa 1)
 - ROZWIĄZANIE: Jeśli sterownik nie wstaje po zaniku prądu, należy 
   zastosować rezystor Pull-Down (10k Ohm) do masy na tym pinie.
 ----------------------------------------------------------------------
+
+source venv/bin/activate
+esphome upload esp_light.yaml --device 192.168.1.93

@@ -70,6 +70,34 @@ time:
     on_time_sync:
       then: [ds1307.write_time: { id: ds_time }]
 
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_big
+    size: 28
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 14
+
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    address: 0x3C
+    id: oled
+    update_interval: 1s
+    lambda: |-
+      auto t = id(ds_time).now();
+      if (!t.is_valid()) {
+        it.printf(64, 32, id(font_small), TextAlign::CENTER, "Brak czasu");
+        return;
+      }
+      it.strftime(64, 0, id(font_big), TextAlign::TOP_CENTER, "%H:%M:%S", t);
+      it.strftime(64, 40, id(font_small), TextAlign::TOP_CENTER, "%d.%m.%Y", t);
+
+
+
+
+
 output:
   - { platform: ledc, pin: 12, id: out_lampa1, frequency: 1000Hz }
   - { platform: ledc, pin: 13, id: out_lampa2, frequency: 1000Hz }
@@ -673,7 +701,7 @@ interval:
             // Używamy micros() dla lepszej losowości niż cur
             srand(micros()); 
             int chance = rand() % 100;
-            if (chance < 20) { // Zwiększyłem do 20% dla testu
+            if (chance < 10) { // Zwiększyłem do 20% dla testu
               cloud_factor = 0.60f;
               // Ten log pojawi się od razu po wylosowaniu
               ESP_LOGW("akwarium", "LOSOWANIE: Chmura! (wylosowano: %d)", chance);
